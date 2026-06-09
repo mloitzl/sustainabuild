@@ -1,0 +1,32 @@
+{
+  "name": "@sustainabuild/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev --port 3000",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@sustainabuild/types": "workspace:*",
+    "iron-session": "^8.0.3",
+    "jose": "^5.9.6",
+    "next": "^15.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@sustainabuild/eslint-config": "workspace:*",
+    "@sustainabuild/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^15.0.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.0"
+  }
+}
