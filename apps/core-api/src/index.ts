@@ -1,5 +1,8 @@
 import { createServer } from 'http';
+import { execute, subscribe } from 'graphql';
 import { createYoga, createSchema } from 'graphql-yoga';
+import { useServer } from 'graphql-ws/lib/use/ws';
+import { WebSocketServer } from 'ws';
 import { typeDefs } from './graphql/schema';
 import { resolvers } from './graphql/resolvers';
 import { connectMongo, disconnectMongo } from './db/mongo';
@@ -29,16 +32,21 @@ async function main() {
     logging: true,
   });
 
-  // graphql-yoga handles both HTTP and WebSocket (SSE) subscriptions natively
   const httpServer = createServer(yoga);
 
+  // WebSocket server on the same port/path for graphql-ws (used by agents and frontend subscriptions)
+  const wss = new WebSocketServer({ server: httpServer, path: '/graphql' });
+  useServer({ schema, execute, subscribe }, wss);
+
   httpServer.listen(PORT, () => {
-    console.log(`[Core API] GraphQL server running at http://localhost:${PORT}/graphql`);
-    console.log(`[Core API] Health check at         http://localhost:${PORT}/health`);
+    console.log(`[Core API] GraphQL server  → http://localhost:${PORT}/graphql`);
+    console.log(`[Core API] WS subscriptions → ws://localhost:${PORT}/graphql`);
+    console.log(`[Core API] Health check    → http://localhost:${PORT}/health`);
   });
 
   const shutdown = async () => {
     console.log('[Core API] Shutting down...');
+    wss.close();
     httpServer.close();
     await disconnectMongo();
     process.exit(0);
