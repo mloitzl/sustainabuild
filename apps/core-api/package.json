@@ -1,0 +1,26 @@
+{
+  "name": "@sustainabuild/core-api",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node --transpile-only src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@sustainabuild/types": "workspace:*",
+    "graphql": "^16.9.0",
+    "graphql-yoga": "^5.10.0",
+    "mongodb": "^6.10.0"
+  },
+  "devDependencies": {
+    "@sustainabuild/eslint-config": "workspace:*",
+    "@sustainabuild/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.12",
+    "eslint": "^9.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.0"
+  }
+}
