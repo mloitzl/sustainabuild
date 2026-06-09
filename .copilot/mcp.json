@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "typescript": {
+      "enabled": true,
+      "command": "node",
+      "args": ["--require", "tsx", "-"],
+      "description": "TypeScript language server for type checking and schema validation"
+    },
+    "graphql": {
+      "enabled": true,
+      "command": "npx",
+      "args": ["@graphql-cli/cli", "serve"],
+      "description": "GraphQL schema inspection and validation for Core API"
+    },
+    "playwright": {
+      "enabled": true,
+      "command": "npx",
+      "args": ["playwright", "install", "--with-deps"],
+      "description": "Playwright for E2E testing the Next.js BFF frontend"
+    }
+  }
+}
