@@ -1,4 +1,6 @@
 import { createPubSub } from 'graphql-yoga';
+import { ClusterAggregate } from '../domains/cluster';
+import { getEventsByAggregate, appendEvent } from '../events/store';
 
 export const pubSub = createPubSub<{
   CLUSTER_POWER_UPDATED: [clusterId: string, powerW: number];
@@ -6,6 +8,41 @@ export const pubSub = createPubSub<{
 }>();
 
 const PACKAGE_VERSION = '0.1.0';
+
+/**
+ * Helper to load or create a cluster aggregate and execute a command
+ */
+async function executeClusterCommand(
+  clusterId: string,
+  command: (aggregate: ClusterAggregate) => Promise<any[]>,
+): Promise<any> {
+  // Load event history
+  const events = await getEventsByAggregate(clusterId);
+
+  // Load or initialize cluster
+  let aggregate: ClusterAggregate;
+  if (events.length === 0) {
+    // New cluster
+    aggregate = new ClusterAggregate(clusterId, clusterId);
+  } else {
+    aggregate = await ClusterAggregate.loadFromHistory(clusterId, events);
+  }
+
+  // Execute command
+  await command(aggregate);
+
+  // Return projected state
+  const state = aggregate.getState();
+  return {
+    id: state.id,
+    name: state.name,
+    status: state.status,
+    currentPowerW: 0, // TODO: Read from telemetry
+    activeLeaseCount: state.leases.size,
+    runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+    nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+  };
+}
 
 export const resolvers = {
   Query: {
@@ -30,11 +67,17 @@ export const resolvers = {
   },
 
   Mutation: {
-    createCluster: (_parent: unknown, { name }: { name: string }) => {
-      // TODO: Append ClusterCreated domain event
-      console.log(`[Resolver] createCluster("${name}") — stub`);
+    createCluster: async (_parent: unknown, { name }: { name: string }) => {
+      const clusterId = `cluster-${Date.now()}`;
+      console.log(`[Resolver] createCluster("${name}") → id=${clusterId}`);
+
+      await appendEvent('ClusterCreated', clusterId, 'Cluster', {
+        name,
+        createdAt: new Date(),
+      });
+
       return {
-        id: 'stub-id',
+        id: clusterId,
         name,
         status: 'OFFLINE',
         currentPowerW: 0,
@@ -44,47 +87,33 @@ export const resolvers = {
       };
     },
 
-    acquireClusterLease: (_parent: unknown, { clusterId, runId }: { clusterId: string; runId: string }) => {
-      console.log(`[Resolver] acquireClusterLease(cluster=${clusterId}, run=${runId}) — stub`);
-      return {
-        id: clusterId,
-        name: 'stub',
-        status: 'OFFLINE',
-        currentPowerW: 0,
-        activeLeaseCount: 1,
-        runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
-        nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
-      };
+    acquireClusterLease: async (_parent: unknown, { clusterId, runId }: { clusterId: string; runId: string }) => {
+      console.log(`[Resolver] acquireClusterLease(cluster=${clusterId}, run=${runId})`);
+
+      return executeClusterCommand(clusterId, async (aggregate) => {
+        return aggregate.acquireLease(runId);
+      });
     },
 
-    releaseClusterLease: (_parent: unknown, { clusterId, runId }: { clusterId: string; runId: string }) => {
-      console.log(`[Resolver] releaseClusterLease(cluster=${clusterId}, run=${runId}) — stub`);
-      return {
-        id: clusterId,
-        name: 'stub',
-        status: 'OFFLINE',
-        currentPowerW: 0,
-        activeLeaseCount: 0,
-        runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
-        nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
-      };
+    releaseClusterLease: async (_parent: unknown, { clusterId, runId }: { clusterId: string; runId: string }) => {
+      console.log(`[Resolver] releaseClusterLease(cluster=${clusterId}, run=${runId})`);
+
+      return executeClusterCommand(clusterId, async (aggregate) => {
+        return aggregate.releaseLease(runId);
+      });
     },
 
-    renewClusterLease: (_parent: unknown, { clusterId, runId }: { clusterId: string; runId: string }) => {
-      console.log(`[Resolver] renewClusterLease(cluster=${clusterId}, run=${runId}) — stub`);
-      return {
-        id: clusterId,
-        name: 'stub',
-        status: 'ONLINE',
-        currentPowerW: 0,
-        activeLeaseCount: 1,
-        runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
-        nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
-      };
+    renewClusterLease: async (_parent: unknown, { clusterId, runId }: { clusterId: string; runId: string }) => {
+      console.log(`[Resolver] renewClusterLease(cluster=${clusterId}, run=${runId})`);
+
+      return executeClusterCommand(clusterId, async (aggregate) => {
+        return aggregate.renewLease(runId);
+      });
     },
 
-    forceShutdownCluster: (_parent: unknown, { clusterId }: { clusterId: string }) => {
+    forceShutdownCluster: async (_parent: unknown, { clusterId }: { clusterId: string }) => {
       console.log(`[Resolver] forceShutdownCluster(cluster=${clusterId}) — stub`);
+      // TODO: Implement shutdown saga
       return {
         id: clusterId,
         name: 'stub',
@@ -96,8 +125,8 @@ export const resolvers = {
       };
     },
 
-    generateProvisioningToken: (_parent: unknown, { clusterId }: { clusterId: string }) => {
-      // TODO: Sign a real 1-hour JWT in business logic phase
+    generateProvisioningToken: async (_parent: unknown, { clusterId }: { clusterId: string }) => {
+      // TODO: Sign a real 1-hour JWT in provisioning phase
       console.log(`[Resolver] generateProvisioningToken(cluster=${clusterId}) — stub`);
       return `stub-provisioning-token-${clusterId}`;
     },
