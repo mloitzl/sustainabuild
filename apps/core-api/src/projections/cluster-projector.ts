@@ -141,6 +141,24 @@ export class ClusterReadModelProjector {
         console.log(`[ClusterProjector] ClusterPendingShutdownAborted: ${clusterId}`);
         break;
 
+      case 'ClusterForceShutdownStarted':
+        await this.clustersCollection.updateOne(
+          { _id: clusterId },
+          {
+            $set: {
+              status: 'SHUTTING_DOWN',
+              updatedAt: event.occurredAt,
+            },
+            $unset: {
+              pendingShutdownEnteredAt: '',
+              gracePeriodMs: '',
+            },
+          },
+          { upsert: true },
+        );
+        console.log(`[ClusterProjector] ClusterForceShutdownStarted: ${clusterId}`);
+        break;
+
       default:
         // Ignore other event types
         break;

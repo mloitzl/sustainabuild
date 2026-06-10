@@ -58,6 +58,7 @@ export type DomainEventType =
   | 'ClusterLeaseRenewed'
   | 'ClusterPendingShutdownEntered'
   | 'ClusterPendingShutdownAborted'
+  | 'ClusterForceShutdownStarted'
   | 'ClusterShutdownInitiated'
   | 'ClusterPoweredOn'
   | 'ClusterPoweredOff'

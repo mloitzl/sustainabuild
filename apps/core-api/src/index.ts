@@ -5,9 +5,10 @@ import { useServer } from 'graphql-ws/lib/use/ws';
 import { WebSocketServer } from 'ws';
 import { typeDefs } from './graphql/schema';
 import { resolvers } from './graphql/resolvers';
-import { connectMongo, disconnectMongo } from './db/mongo';
+import { connectMongo, disconnectMongo, getDb } from './db/mongo';
 import { createEventStoreIndexes } from './events/store';
 import { startProjector } from './projections/projector';
+import { startLeaseReaper, stopLeaseReaper } from './services/lease-reaper';
 
 const PORT = Number(process.env.PORT) || 4000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
@@ -19,6 +20,7 @@ async function main() {
     await connectMongo(MONGO_URI, MONGO_DB);
     await createEventStoreIndexes();
     await startProjector();
+    startLeaseReaper(getDb());
   } catch (err) {
     console.warn('[Startup] MongoDB unavailable — running without persistence:', (err as Error).message);
   }
@@ -46,6 +48,7 @@ async function main() {
 
   const shutdown = async () => {
     console.log('[Core API] Shutting down...');
+    stopLeaseReaper();
     wss.close();
     httpServer.close();
     await disconnectMongo();

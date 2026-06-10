@@ -74,6 +74,9 @@ export class ClusterAggregate {
       } else if (event.type === 'ClusterPendingShutdownAborted') {
         aggregate.state.status = aggregate.state.leases.size > 0 ? 'ONLINE' : 'OFFLINE';
         aggregate.state.pendingShutdownEnteredAt = undefined;
+      } else if (event.type === 'ClusterForceShutdownStarted') {
+        aggregate.state.status = 'SHUTTING_DOWN';
+        aggregate.state.pendingShutdownEnteredAt = undefined;
       }
     }
 
