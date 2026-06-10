@@ -27,14 +27,6 @@ function createWsClient(): Client {
       await new Promise((res) => setTimeout(res, delay));
     },
     on: {
-      connected: () => {
-        isConnected = true;
-        console.log('[Agent] Connected to Core API');
-        // Emit NodeConnected event
-        emitNodeConnected().catch((err) => {
-          console.error('[Agent] Error emitting NodeConnected:', err);
-        });
-      },
       closed: (event) => {
         isConnected = false;
         const code = (event as { code?: number }).code;
@@ -244,21 +236,32 @@ export async function startAgent(): Promise<void> {
 
   client = createWsClient();
 
-  // Wait a bit for initial connection, then subscribe
-  setTimeout(() => {
-    if (isConnected) {
-      subscribeToShutdownCommands().catch((err) => {
-        console.error('[Agent] Error subscribing to shutdown commands:', err);
-      });
-    } else {
-      console.warn('[Agent] Not connected yet, will retry subscription');
-      setTimeout(() => {
-        subscribeToShutdownCommands().catch((err) => {
-          console.error('[Agent] Error subscribing to shutdown commands:', err);
-        });
-      }, 2000);
+  // First, emit NodeConnected to establish connection
+  let attempts = 0;
+  const maxAttempts = 5;
+  while (attempts < maxAttempts) {
+    try {
+      console.log(`[Agent] Attempting to connect and emit NodeConnected (attempt ${attempts + 1}/${maxAttempts})...`);
+      await emitNodeConnected();
+      isConnected = true;
+      console.log('[Agent] Connected to Core API');
+      break;
+    } catch (err) {
+      attempts++;
+      if (attempts < maxAttempts) {
+        console.warn(`[Agent] Connection attempt ${attempts} failed, retrying in 1s...`);
+        await new Promise((res) => setTimeout(res, 1000));
+      } else {
+        console.error('[Agent] Failed to connect after', maxAttempts, 'attempts');
+        process.exit(1);
+      }
     }
-  }, 1000);
+  }
+
+  // Subscribe to shutdown commands
+  subscribeToShutdownCommands().catch((err) => {
+    console.error('[Agent] Error subscribing to shutdown commands:', err);
+  });
 
   console.log('[Agent] WebSocket client initialized — listening for commands');
 }

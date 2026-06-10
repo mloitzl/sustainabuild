@@ -35,12 +35,10 @@ async function main() {
     healthCheckEndpoint: '/health',
     logging: true,
     context: async (ctx) => {
-      // Enrich context with agent info from WebSocket auth
-      const agentInfo = (ctx as any).agentInfo;
       return {
         agentRegistry,
         db: getDb(),
-        agentInfo, // { clusterId, nodeId } if authenticated as agent
+        agentInfo: (ctx as any).agentInfo,
       };
     },
   });
@@ -54,8 +52,8 @@ async function main() {
       schema,
       execute,
       subscribe,
-      // Validate agent JWT on connection
-      onConnect: async (ctx) => {
+      // Validate agent JWT on connection and attach decoded info to context
+      onConnect: async (ctx: any) => {
         const connectionParams = ctx.connectionParams as Record<string, any>;
         const authHeader = connectionParams?.Authorization || connectionParams?.authorization;
 
@@ -64,8 +62,8 @@ async function main() {
           try {
             const decoded = await verifyDeviceJwt(token);
             console.log(`[WebSocket] Authenticated agent: cluster=${decoded.clusterId}`);
-            // Attach to context so resolvers can access it
-            (ctx as any).agentInfo = decoded;
+            // Attach decoded JWT to context so resolvers can access it
+            ctx.agentInfo = decoded;
             return true; // Allow connection
           } catch (err) {
             console.warn(`[WebSocket] JWT verification failed: ${(err as Error).message}`);

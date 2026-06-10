@@ -334,6 +334,7 @@ export const resolvers = {
         })();
         return filteredAsyncIterable;
       },
+      resolve: (command: Record<string, unknown>) => command as any,
     },
   },
 
