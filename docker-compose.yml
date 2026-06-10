@@ -1,17 +1,40 @@
 services:
   mongodb:
     image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/keyfile/mongo-keyfile"]
     restart: unless-stopped
     volumes:
       - mongodb_data:/data/db
+      - mongodb_keyfile:/data/keyfile
     environment:
-      MONGO_INITDB_DATABASE: sustainabuild
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
+    user: "999:999"
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: >
+        mongosh --username ${MONGO_USER} --password ${MONGO_PASS}
+        --authenticationDatabase admin --eval "db.adminCommand('ping')" --quiet
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 60s
+
+  # Generates the replica-set keyfile (shared volume) then calls rs.initiate().
+  # MongoDB cannot start without the keyfile, so it restarts until this writes it.
+  # Bootstrap: init generates keyfile → mongo restarts → init polls until ready →
+  # init runs rs.initiate() → exits 0 → core-api starts.
+  mongodb-init:
+    image: mongo:7
+    depends_on:
+      - mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
+    volumes:
+      - ./infra/mongodb/init-replica-set.sh:/init-replica-set.sh:ro
+      - mongodb_keyfile:/data/keyfile
+    entrypoint: ["/bin/bash", "/init-replica-set.sh"]
+    restart: on-failure
 
   core-api:
     build:
@@ -23,12 +46,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: "4000"
-      MONGO_URI: mongodb://mongodb:27017
+      MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASS}@mongodb:27017/sustainabuild?authSource=admin&replicaSet=rs0
       MONGO_DB: sustainabuild
       CORE_API_JWT_SECRET: ${CORE_API_JWT_SECRET:-change-me-in-production-32chars!!}
     depends_on:
-      mongodb:
-        condition: service_healthy
+      mongodb-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
       interval: 15s
@@ -54,3 +77,4 @@ services:
 
 volumes:
   mongodb_data:
+  mongodb_keyfile:
