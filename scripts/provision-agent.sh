@@ -25,7 +25,7 @@ PROVISIONING_TOKEN=""
 CLUSTER_ID=""
 API_URL="${CORE_API_URL:-http://localhost:4000}"
 DEV_LOCAL=false
-AGENT_HOME=""
+: "${AGENT_HOME:=}"  # Allow env var override
 LEASE_TTL_SECONDS="${LEASE_TTL_SECONDS:-3600}"
 
 # Functions
