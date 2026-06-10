@@ -1,7 +1,7 @@
 import { createPubSub } from 'graphql-yoga';
 import { ClusterAggregate } from '../domains/cluster';
 import { NodeAggregate } from '../domains/node';
-import { getEventsByAggregate, appendEvent } from '../events/store';
+import { getEventsByAggregate, appendEvent, getEventsByTypeInTimeWindow } from '../events/store';
 import { getClusterProjector } from '../projections/projector';
 import { getNodeProjector } from '../projections/node-projector';
 import { generateProvisioningToken, exchangeProvisioningToken } from '../utils/jwt';
@@ -13,6 +13,37 @@ export const pubSub = createPubSub<{
 }>();
 
 const PACKAGE_VERSION = '0.1.0';
+
+function getRunIdFromPayload(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const maybeRunId = (payload as { runId?: unknown }).runId;
+  return typeof maybeRunId === 'string' ? maybeRunId : undefined;
+}
+
+function getPipelineRunWindow(events: Array<{ type: string; payload: unknown; occurredAt: Date }>, runId: string) {
+  const leaseAcquired = events.find(
+    (event) => event.type === 'ClusterLeaseAcquired' && getRunIdFromPayload(event.payload) === runId,
+  );
+
+  if (!leaseAcquired) {
+    throw new Error(`Pipeline run not found: ${runId}`);
+  }
+
+  const leaseReleased = events.find(
+    (event) =>
+      event.type === 'ClusterLeaseReleased' &&
+      getRunIdFromPayload(event.payload) === runId &&
+      event.occurredAt.getTime() >= leaseAcquired.occurredAt.getTime(),
+  );
+
+  return {
+    startedAt: leaseAcquired.occurredAt,
+    completedAt: leaseReleased?.occurredAt,
+  };
+}
 
 /**
  * Helper to load or create a cluster aggregate and execute a command
@@ -178,6 +209,54 @@ export const resolvers = {
       console.log(`[Resolver] clusterPowerStats(clusterId=${clusterId})`);
       const projector = getNodeProjector();
       return projector.getClusterPowerStats(clusterId);
+    },
+
+    pipelineRunCost: async (
+      _parent: unknown,
+      { clusterId, runId, costPerKwh }: { clusterId: string; runId: string; costPerKwh: number },
+    ) => {
+      console.log(`[Resolver] pipelineRunCost(clusterId=${clusterId}, runId=${runId}, costPerKwh=${costPerKwh})`);
+
+      const projector = getClusterProjector();
+      const cluster = await projector.getCluster(clusterId);
+
+      if (!cluster) {
+        throw new Error(`Cluster not found: ${clusterId}`);
+      }
+
+      const clusterEvents = await getEventsByAggregate(clusterId);
+      const { startedAt, completedAt } = getPipelineRunWindow(clusterEvents, runId);
+      const endTime = completedAt ?? new Date();
+
+      if (endTime.getTime() < startedAt.getTime()) {
+        throw new Error(`Invalid pipeline run window for ${runId}`);
+      }
+
+      const events = await getEventsByTypeInTimeWindow('NodePowerTickRecorded', startedAt, endTime);
+
+      // Filter events for this cluster and aggregate energy within the lease window
+      let totalEnergyWh = 0;
+      for (const event of events) {
+        if (event.aggregateId.startsWith(`${clusterId}#`)) {
+          const payload = event.payload as Record<string, unknown>;
+          totalEnergyWh += (payload.energyWh as number) || 0;
+        }
+      }
+
+      const totalKwh = totalEnergyWh / 1000;
+      const totalCost = totalKwh * costPerKwh;
+      console.log(
+        `[Resolver] pipelineRunCost(${clusterId}/${runId}) window=${startedAt.toISOString()}..${endTime.toISOString()} energyWh=${totalEnergyWh} cost=${totalCost}`,
+      );
+
+      return {
+        pipelineRunId: runId,
+        totalEnergyWh,
+        totalKwh,
+        costPerKwh,
+        totalCost,
+        calculatedAt: new Date().toISOString(),
+      };
     },
   },
 

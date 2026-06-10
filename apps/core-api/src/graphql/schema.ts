@@ -98,6 +98,15 @@ export const typeDefs = /* GraphQL */ `
     totalCost: Float!
   }
 
+  type PipelineRunCost {
+    pipelineRunId: ID!
+    totalEnergyWh: Float!
+    totalKwh: Float!
+    costPerKwh: Float!
+    totalCost: Float!
+    calculatedAt: String!
+  }
+
   type ClusterNodeEdge {
     cursor: String!
     node: ClusterNode!
@@ -152,6 +161,7 @@ export const typeDefs = /* GraphQL */ `
     nodeStats(nodeId: ID!, clusterId: ID!): NodeStats
     nodesByCluster(clusterId: ID!, first: Int, after: String): ClusterNodeConnection!
     clusterPowerStats(clusterId: ID!): ClusterPowerStats!
+    pipelineRunCost(clusterId: ID!, runId: ID!, costPerKwh: Float!): PipelineRunCost!
   }
 
   type Mutation {
