@@ -7,6 +7,7 @@ import { generateProvisioningToken, exchangeProvisioningToken } from '../utils/j
 export const pubSub = createPubSub<{
   CLUSTER_POWER_UPDATED: [clusterId: string, powerW: number];
   NODE_JOINED_CLUSTER: [clusterId: string, node: Record<string, unknown>];
+  SHUTDOWN_NODE_COMMAND: [command: Record<string, unknown>];
 }>();
 
 const PACKAGE_VERSION = '0.1.0';
@@ -218,6 +219,93 @@ export const resolvers = {
         throw new Error(`Failed to exchange provisioning token: ${(err as Error).message}`);
       }
     },
+
+    emitNodeConnected: async (
+      _parent: unknown,
+      { clusterId, nodeId }: { clusterId: string; nodeId: string },
+      context: any,
+    ) => {
+      console.log(`[Resolver] emitNodeConnected(cluster=${clusterId}, node=${nodeId})`);
+
+      // Register agent in the connected agents registry
+      const agentRegistry = context.agentRegistry;
+      agentRegistry.addAgent(clusterId, nodeId);
+
+      // Emit domain event
+      await appendEvent('NodeConnected', clusterId, 'Cluster', {
+        clusterId,
+        nodeId,
+        connectedAt: new Date(),
+      });
+
+      return {
+        clusterId,
+        nodeId,
+        connectedAt: new Date().toISOString(),
+      };
+    },
+
+    broadcastShutdownNode: async (
+      _parent: unknown,
+      { clusterId, nodeId, gracePeriodSeconds }: { clusterId: string; nodeId: string; gracePeriodSeconds: number },
+      context: any,
+    ) => {
+      console.log(`[Resolver] broadcastShutdownNode(cluster=${clusterId}, node=${nodeId}, grace=${gracePeriodSeconds}s)`);
+
+      const commandId = `cmd-${Date.now()}`;
+      const sentAt = new Date();
+
+      // Publish shutdown command to the agent via subscription
+      const command: Record<string, unknown> = {
+        clusterId,
+        nodeId,
+        commandId,
+        gracePeriodSeconds,
+        issuedAt: sentAt.toISOString(),
+      };
+
+      // Publish to shutdown node subscription channel
+      pubSub.publish('SHUTDOWN_NODE_COMMAND', command);
+
+      // Emit domain event for audit trail
+      await appendEvent('NodeShutdownCommandAcked', clusterId, 'Cluster', {
+        clusterId,
+        nodeId,
+        commandId,
+        ackedAt: sentAt,
+      });
+
+      return {
+        clusterId,
+        nodeId,
+        commandId,
+        sentAt: sentAt.toISOString(),
+      };
+    },
+
+    emitNodeHalting: async (
+      _parent: unknown,
+      { clusterId, nodeId }: { clusterId: string; nodeId: string },
+      context: any,
+    ) => {
+      console.log(`[Resolver] emitNodeHalting(cluster=${clusterId}, node=${nodeId})`);
+
+      // Remove agent from registry (it's about to shut down)
+      const agentRegistry = context.agentRegistry;
+      agentRegistry.removeAgent(clusterId, nodeId);
+
+      // Emit domain event
+      await appendEvent('NodeHalting', clusterId, 'Cluster', {
+        clusterId,
+        nodeId,
+        haltingAt: new Date(),
+      });
+
+      return {
+        clusterId,
+        nodeId,
+      };
+    },
   },
 
   Subscription: {
@@ -230,6 +318,22 @@ export const resolvers = {
       subscribe: (_parent: unknown, { clusterId }: { clusterId: string }) =>
         pubSub.subscribe('NODE_JOINED_CLUSTER', clusterId),
       resolve: (payload: Record<string, unknown>) => payload,
+    },
+    shutdownNode: {
+      subscribe: (_parent: unknown, { clusterId, nodeId }: { clusterId: string; nodeId: string }) => {
+        console.log(`[Resolver] shutdownNode subscription: cluster=${clusterId}, node=${nodeId}`);
+        // Return a custom async iterator that filters commands for this agent
+        const innerAsyncIterable = pubSub.subscribe('SHUTDOWN_NODE_COMMAND');
+        const filteredAsyncIterable = (async function* () {
+          for await (const command of innerAsyncIterable) {
+            const cmd = command as Record<string, unknown>;
+            if (cmd.clusterId === clusterId && cmd.nodeId === nodeId) {
+              yield command;
+            }
+          }
+        })();
+        return filteredAsyncIterable;
+      },
     },
   },
 

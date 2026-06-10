@@ -2,8 +2,7 @@ import { startAgent } from './ws-client';
 
 // Graceful shutdown handler
 process.on('SIGTERM', () => {
-  console.log('[Agent] SIGTERM received — beginning graceful halt sequence');
-  // TODO: emit NodeHalting event to Core API before calling triggerShutdown()
+  console.log('[Agent] SIGTERM received — stopping gracefully');
   process.exit(0);
 });
 
@@ -12,4 +11,7 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-startAgent();
+startAgent().catch((err) => {
+  console.error('[Agent] Fatal error during startup:', err);
+  process.exit(1);
+});

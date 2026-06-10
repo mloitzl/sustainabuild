@@ -86,6 +86,32 @@ export const typeDefs = /* GraphQL */ `
     clusterId: ID!
   }
 
+  type NodeConnectedEvent {
+    clusterId: ID!
+    nodeId: ID!
+    connectedAt: String!
+  }
+
+  type ShutdownNodeCommand {
+    clusterId: ID!
+    nodeId: ID!
+    commandId: ID!
+    gracePeriodSeconds: Int!
+    issuedAt: String!
+  }
+
+  type NodeHaltingEvent {
+    clusterId: ID!
+    nodeId: ID!
+  }
+
+  type ShutdownCommandResponse {
+    clusterId: ID!
+    nodeId: ID!
+    commandId: ID!
+    sentAt: String!
+  }
+
   type Query {
     health: Health!
     node(id: ID!): Node
@@ -101,10 +127,14 @@ export const typeDefs = /* GraphQL */ `
     forceShutdownCluster(clusterId: ID!): Cluster!
     generateProvisioningToken(clusterId: ID!): String!
     exchangeProvisioningToken(provisioningToken: String!): ProvisioningExchange!
+    emitNodeConnected(clusterId: ID!, nodeId: ID!): NodeConnectedEvent!
+    broadcastShutdownNode(clusterId: ID!, nodeId: ID!, gracePeriodSeconds: Int!): ShutdownCommandResponse!
+    emitNodeHalting(clusterId: ID!, nodeId: ID!): NodeHaltingEvent!
   }
 
   type Subscription {
     clusterPowerUpdated(clusterId: ID!): Float!
     nodeJoinedCluster(clusterId: ID!): ClusterNode!
+    shutdownNode(clusterId: ID!, nodeId: ID!): ShutdownNodeCommand!
   }
 `;

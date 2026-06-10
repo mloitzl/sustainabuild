@@ -3,8 +3,14 @@ import WebSocket from 'ws';
 
 const CORE_API_URL = process.env.CORE_API_URL ?? 'ws://localhost:4000/graphql';
 const DEVICE_JWT = process.env.DEVICE_JWT ?? '';
+const CLUSTER_ID = process.env.CLUSTER_ID ?? '';
+const NODE_ID = process.env.NODE_ID ?? `node-${Date.now()}`;
+const MOCK_DBUS = process.env.MOCK_DBUS === 'true';
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS) || 300_000; // 5 minutes
 
 let client: Client;
+let isConnected = false;
+let isShuttingDown = false;
 
 function createWsClient(): Client {
   return createClient({
@@ -14,7 +20,7 @@ function createWsClient(): Client {
       Authorization: DEVICE_JWT ? `Bearer ${DEVICE_JWT}` : undefined,
     },
     retryAttempts: Infinity,
-    shouldRetry: () => true,
+    shouldRetry: () => !isShuttingDown,
     retryWait: async (retries) => {
       // Exponential backoff: 1s, 2s, 4s … capped at 30s
       const delay = Math.min(1000 * Math.pow(2, retries), 30_000);
@@ -22,53 +28,238 @@ function createWsClient(): Client {
     },
     on: {
       connected: () => {
+        isConnected = true;
         console.log('[Agent] Connected to Core API');
+        // Emit NodeConnected event
+        emitNodeConnected().catch((err) => {
+          console.error('[Agent] Error emitting NodeConnected:', err);
+        });
       },
       closed: (event) => {
+        isConnected = false;
         const code = (event as { code?: number }).code;
-        console.warn(`[Agent] Disconnected (code=${code ?? 'unknown'}), retrying…`);
+        if (!isShuttingDown) {
+          console.warn(`[Agent] Disconnected (code=${code ?? 'unknown'}), retrying…`);
+        }
       },
-      error: (err) => {
+      error: (err: unknown) => {
         console.error('[Agent] WebSocket error:', (err as Error).message ?? err);
       },
     },
   });
 }
 
-export function startAgent() {
-  console.log(`[Agent] Starting — Core API: ${CORE_API_URL}`);
-  client = createWsClient();
+/**
+ * Emit NodeConnected mutation to Core API
+ */
+async function emitNodeConnected(): Promise<void> {
+  if (!client || !CLUSTER_ID || !NODE_ID) {
+    console.warn('[Agent] Cannot emit NodeConnected: missing client, cluster ID, or node ID');
+    return;
+  }
 
-  // Subscribe to shutdown commands. graphql-ws keeps the event loop alive
-  // and automatically re-subscribes after reconnection.
+  return new Promise((resolve, reject) => {
+    client.subscribe(
+      {
+        query: `
+          mutation {
+            emitNodeConnected(clusterId: "${CLUSTER_ID}", nodeId: "${NODE_ID}") {
+              clusterId
+              nodeId
+              connectedAt
+            }
+          }
+        `,
+      },
+      {
+        next: (data) => {
+          console.log('[Agent] NodeConnected confirmed');
+          resolve();
+        },
+        error: (err: unknown) => {
+          console.error('[Agent] Error emitting NodeConnected:', (err as Error).message ?? err);
+          reject(err);
+        },
+        complete: () => {
+          resolve();
+        },
+      },
+    );
+  });
+}
+
+/**
+ * Subscribe to shutdown commands for this agent
+ */
+async function subscribeToShutdownCommands(): Promise<void> {
+  if (!client || !CLUSTER_ID || !NODE_ID) {
+    console.warn('[Agent] Cannot subscribe to shutdown commands: missing required IDs');
+    return;
+  }
+
   client.subscribe(
     {
-      query: /* GraphQL */ `
-        subscription OnShutdownCommand {
-          nodeJoinedCluster(clusterId: "broadcast") {
-            id
-            hostname
-            isOnline
+      query: `
+        subscription {
+          shutdownNode(clusterId: "${CLUSTER_ID}", nodeId: "${NODE_ID}") {
+            clusterId
+            nodeId
+            commandId
+            gracePeriodSeconds
+            issuedAt
           }
         }
       `,
     },
     {
       next: (data) => {
-        console.log('[Agent] Received command:', JSON.stringify(data));
-        // TODO: route commands (ShutdownNode, etc.) in business logic phase
+        console.log('[Agent] Received shutdown command:', JSON.stringify(data));
+        const command = (data as Record<string, any>).data?.shutdownNode as Record<string, unknown>;
+        if (command) {
+          handleShutdownCommand(command).catch((err) => {
+            console.error('[Agent] Error handling shutdown command:', err);
+          });
+        }
       },
-      error: (err) => {
-        console.error('[Agent] Subscription error:', (err as Error).message ?? err);
+      error: (err: unknown) => {
+        console.error('[Agent] Shutdown subscription error:', (err as Error).message ?? err);
       },
       complete: () => {
-        console.log('[Agent] Subscription completed — reconnecting');
-        // Re-subscribe on completion
-        setTimeout(startAgent, 1000);
+        console.log('[Agent] Shutdown subscription completed');
+        if (!isShuttingDown) {
+          // Re-subscribe after a delay
+          setTimeout(() => {
+            subscribeToShutdownCommands().catch((err) => {
+              console.error('[Agent] Error re-subscribing:', err);
+            });
+          }, 1000);
+        }
       },
     },
   );
+}
 
-  console.log('[Agent] Listening for commands from Core API');
+/**
+ * Handle a shutdown command from Core API
+ */
+async function handleShutdownCommand(command: Record<string, unknown>): Promise<void> {
+  const gracePeriodSeconds = (command.gracePeriodSeconds as number) ?? 300;
+  const commandId = command.commandId as string;
+
+  console.log(`[Agent] Initiating graceful shutdown (grace period: ${gracePeriodSeconds}s, command: ${commandId})`);
+  isShuttingDown = true;
+
+  // Emit NodeHalting event
+  await emitNodeHalting();
+
+  // Trigger D-Bus poweroff or mock
+  await triggerShutdown(gracePeriodSeconds);
+}
+
+/**
+ * Emit NodeHalting mutation to Core API
+ */
+async function emitNodeHalting(): Promise<void> {
+  if (!client || !CLUSTER_ID || !NODE_ID) {
+    console.warn('[Agent] Cannot emit NodeHalting: missing required IDs');
+    return;
+  }
+
+  return new Promise((resolve) => {
+    client.subscribe(
+      {
+        query: `
+          mutation {
+            emitNodeHalting(clusterId: "${CLUSTER_ID}", nodeId: "${NODE_ID}") {
+              clusterId
+              nodeId
+            }
+          }
+        `,
+      },
+      {
+        next: () => {
+          console.log('[Agent] NodeHalting confirmed');
+          resolve();
+        },
+        error: (err: unknown) => {
+          console.error('[Agent] Error emitting NodeHalting:', (err as Error).message ?? err);
+          resolve(); // Don't fail shutdown
+        },
+        complete: () => {
+          resolve();
+        },
+      },
+    );
+  });
+}
+
+/**
+ * Trigger system shutdown
+ */
+async function triggerShutdown(gracePeriodSeconds: number): Promise<void> {
+  if (MOCK_DBUS) {
+    console.log('[Agent] MOCK_DBUS=true → Would call D-Bus systemd poweroff');
+    // Simulate shutdown with a short delay
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    console.log('[Agent] Mock shutdown complete');
+    process.exit(0);
+  }
+
+  // In production, trigger D-Bus
+  console.log(`[Agent] Triggering D-Bus systemd poweroff (timeout: ${GRACEFUL_SHUTDOWN_TIMEOUT_MS}ms)`);
+
+  const shutdownTimeout = setTimeout(() => {
+    console.error('[Agent] Graceful shutdown timeout — forcing exit');
+    process.exit(1);
+  }, GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+
+  try {
+    // Import dbus module (optional dependency)
+    const { triggerShutdown } = await import('./dbus');
+    await triggerShutdown();
+    clearTimeout(shutdownTimeout);
+    process.exit(0);
+  } catch (err) {
+    console.error('[Agent] D-Bus shutdown failed:', (err as Error).message ?? err);
+    clearTimeout(shutdownTimeout);
+    process.exit(1);
+  }
+}
+
+export async function startAgent(): Promise<void> {
+  if (!DEVICE_JWT) {
+    console.error('[Agent] DEVICE_JWT environment variable not set');
+    process.exit(1);
+  }
+
+  if (!CLUSTER_ID) {
+    console.error('[Agent] CLUSTER_ID environment variable not set');
+    process.exit(1);
+  }
+
+  console.log(`[Agent] Starting — Core API: ${CORE_API_URL}`);
+  console.log(`[Agent] Cluster: ${CLUSTER_ID}, Node: ${NODE_ID}`);
+  console.log(`[Agent] Mock D-Bus: ${MOCK_DBUS}`);
+
+  client = createWsClient();
+
+  // Wait a bit for initial connection, then subscribe
+  setTimeout(() => {
+    if (isConnected) {
+      subscribeToShutdownCommands().catch((err) => {
+        console.error('[Agent] Error subscribing to shutdown commands:', err);
+      });
+    } else {
+      console.warn('[Agent] Not connected yet, will retry subscription');
+      setTimeout(() => {
+        subscribeToShutdownCommands().catch((err) => {
+          console.error('[Agent] Error subscribing to shutdown commands:', err);
+        });
+      }, 2000);
+    }
+  }, 1000);
+
+  console.log('[Agent] WebSocket client initialized — listening for commands');
 }
 
