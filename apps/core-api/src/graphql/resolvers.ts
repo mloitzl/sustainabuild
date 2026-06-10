@@ -1,7 +1,9 @@
 import { createPubSub } from 'graphql-yoga';
 import { ClusterAggregate } from '../domains/cluster';
+import { NodeAggregate } from '../domains/node';
 import { getEventsByAggregate, appendEvent } from '../events/store';
 import { getClusterProjector } from '../projections/projector';
+import { getNodeProjector } from '../projections/node-projector';
 import { generateProvisioningToken, exchangeProvisioningToken } from '../utils/jwt';
 
 export const pubSub = createPubSub<{
@@ -124,6 +126,58 @@ export const resolvers = {
         runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
         nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
       };
+    },
+
+    nodeStats: async (
+      _parent: unknown,
+      { nodeId, clusterId }: { nodeId: string; clusterId: string },
+    ) => {
+      console.log(`[Resolver] nodeStats(nodeId=${nodeId}, clusterId=${clusterId})`);
+      const projector = getNodeProjector();
+      return projector.getNodeStats(nodeId, clusterId);
+    },
+
+    nodesByCluster: async (
+      _parent: unknown,
+      { clusterId, first, after }: { clusterId: string; first?: number; after?: string },
+    ) => {
+      console.log(`[Resolver] nodesByCluster(clusterId=${clusterId})`);
+      const projector = getNodeProjector();
+      const nodes = await projector.getNodesByCluster(clusterId);
+
+      // Simple pagination: convert to cursor-based format
+      const edges = nodes.map((node, idx) => ({
+        cursor: Buffer.from(String(idx)).toString('base64'),
+        node: {
+          id: node._id,
+          clusterId: node.clusterId,
+          hostname: node.hostname,
+          ipAddress: node.ipAddress,
+          status: node.status,
+          onlineAt: node.onlineAt?.toISOString(),
+          offlineAt: node.offlineAt?.toISOString(),
+          joinedAt: node.joinedAt.toISOString(),
+          totalEnergyWh: node.totalEnergyWh,
+          lastPowerW: node.lastPowerW,
+          onlineDurationSeconds: node.onlineDurationSeconds,
+        },
+      }));
+
+      return {
+        edges: edges.slice(0, first ?? 20),
+        pageInfo: {
+          hasNextPage: edges.length > (first ?? 20),
+          hasPreviousPage: false,
+          startCursor: edges[0]?.cursor,
+          endCursor: edges[edges.length - 1]?.cursor,
+        },
+      };
+    },
+
+    clusterPowerStats: async (_parent: unknown, { clusterId }: { clusterId: string }) => {
+      console.log(`[Resolver] clusterPowerStats(clusterId=${clusterId})`);
+      const projector = getNodeProjector();
+      return projector.getClusterPowerStats(clusterId);
     },
   },
 
@@ -304,6 +358,69 @@ export const resolvers = {
       return {
         clusterId,
         nodeId,
+      };
+    },
+
+    recordNodePowerTick: async (
+      _parent: unknown,
+      { nodeId, clusterId, powerW, energyWh }: { nodeId: string; clusterId: string; powerW: number; energyWh: number },
+      { db }: any,
+    ) => {
+      console.log(`[Resolver] recordNodePowerTick(nodeId=${nodeId}, powerW=${powerW}, energyWh=${energyWh})`);
+
+      // Load or create node aggregate
+      const aggregateId = `${clusterId}#${nodeId}`;
+      const events = await getEventsByAggregate(aggregateId);
+      let aggregate: NodeAggregate;
+
+      if (events.length === 0) {
+        aggregate = new NodeAggregate(nodeId, clusterId, 'raspberry-pi', '192.168.1.100');
+      } else {
+        aggregate = await NodeAggregate.loadFromHistory(nodeId, clusterId, events);
+      }
+
+      // Record power tick
+      await aggregate.recordPowerTick(powerW, energyWh);
+
+      // Wait for projector to catch up
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const projector = getNodeProjector();
+      const stats = await projector.getNodeStats(nodeId, clusterId);
+
+      return stats?.totalEnergyWh || 0;
+    },
+
+    closeBillingCycle: async (
+      _parent: unknown,
+      { nodeId, clusterId, costPerKwh }: { nodeId: string; clusterId: string; costPerKwh: number },
+      { db }: any,
+    ) => {
+      console.log(`[Resolver] closeBillingCycle(nodeId=${nodeId}, costPerKwh=${costPerKwh})`);
+
+      // Load node aggregate
+      const aggregateId = `${clusterId}#${nodeId}`;
+      const events = await getEventsByAggregate(aggregateId);
+      let aggregate: NodeAggregate;
+
+      if (events.length === 0) {
+        throw new Error(`Node not found: ${nodeId}`);
+      }
+
+      aggregate = await NodeAggregate.loadFromHistory(nodeId, clusterId, events);
+      const totalCost = await aggregate.closeBillingCycle(costPerKwh);
+
+      // Wait for projector to catch up
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const projector = getNodeProjector();
+      const stats = await projector.getNodeStats(nodeId, clusterId);
+
+      return {
+        totalEnergyWh: stats?.totalEnergyWh || 0,
+        totalKwh: (stats?.totalEnergyWh || 0) / 1000,
+        costPerKwh,
+        totalCost,
       };
     },
   },

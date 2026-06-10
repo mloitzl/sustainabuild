@@ -32,12 +32,16 @@ export interface PipelineRun {
 
 // Node (Raspberry Pi)
 
+export type NodeStatus = 'PROVISIONED' | 'ONLINE' | 'OFFLINE' | 'DECOMMISSIONED';
+
 export interface ClusterNode {
   id: string;
   clusterId: string;
   hostname: string;
   ipAddress: string;
-  isOnline: boolean;
+  status: NodeStatus;
+  onlineAt?: Date;
+  offlineAt?: Date;
   joinedAt: Date;
 }
 
@@ -68,6 +72,10 @@ export type DomainEventType =
   | 'NodeIsDown'
   | 'NodeConnected'
   | 'NodeDisconnected'
+  | 'NodeOnline'
+  | 'NodeOffline'
+  | 'NodePowerTickRecorded'
+  | 'NodeBillingCycleClosed'
   | 'ProvisioningTokenGenerated'
   | 'NodeProvisioned'
   | 'PipelineRunStarted'

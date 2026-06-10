@@ -62,8 +62,40 @@ export const typeDefs = /* GraphQL */ `
     clusterId: ID!
     hostname: String!
     ipAddress: String!
-    isOnline: Boolean!
+    status: NodeStatus!
+    onlineAt: String
+    offlineAt: String
     joinedAt: String!
+    totalEnergyWh: Float!
+    lastPowerW: Float!
+    onlineDurationSeconds: Int!
+  }
+
+  enum NodeStatus {
+    PROVISIONED
+    ONLINE
+    OFFLINE
+    DECOMMISSIONED
+  }
+
+  type NodeStats {
+    onlineDurationSeconds: Int!
+    lastPowerW: Float!
+    totalEnergyWh: Float!
+    status: NodeStatus!
+  }
+
+  type ClusterPowerStats {
+    totalOnlineNodes: Int!
+    totalPowerW: Float!
+    totalEnergyWh: Float!
+  }
+
+  type BillingCycle {
+    totalEnergyWh: Float!
+    totalKwh: Float!
+    costPerKwh: Float!
+    totalCost: Float!
   }
 
   type ClusterNodeEdge {
@@ -117,6 +149,9 @@ export const typeDefs = /* GraphQL */ `
     node(id: ID!): Node
     clusters(first: Int, after: String): ClusterConnection!
     cluster(id: ID!): Cluster
+    nodeStats(nodeId: ID!, clusterId: ID!): NodeStats
+    nodesByCluster(clusterId: ID!, first: Int, after: String): ClusterNodeConnection!
+    clusterPowerStats(clusterId: ID!): ClusterPowerStats!
   }
 
   type Mutation {
@@ -130,6 +165,8 @@ export const typeDefs = /* GraphQL */ `
     emitNodeConnected(clusterId: ID!, nodeId: ID!): NodeConnectedEvent!
     broadcastShutdownNode(clusterId: ID!, nodeId: ID!, gracePeriodSeconds: Int!): ShutdownCommandResponse!
     emitNodeHalting(clusterId: ID!, nodeId: ID!): NodeHaltingEvent!
+    recordNodePowerTick(nodeId: ID!, clusterId: ID!, powerW: Float!, energyWh: Float!): Float!
+    closeBillingCycle(nodeId: ID!, clusterId: ID!, costPerKwh: Float!): BillingCycle!
   }
 
   type Subscription {

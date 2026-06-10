@@ -8,6 +8,7 @@ import { resolvers } from './graphql/resolvers';
 import { connectMongo, disconnectMongo, getDb } from './db/mongo';
 import { createEventStoreIndexes } from './events/store';
 import { startProjector } from './projections/projector';
+import { initNodeProjector } from './projections/node-projector';
 import { startLeaseReaper, stopLeaseReaper } from './services/lease-reaper';
 import { agentRegistry } from './services/agent-registry';
 import { verifyDeviceJwt } from './utils/jwt';
@@ -22,6 +23,12 @@ async function main() {
     await connectMongo(MONGO_URI, MONGO_DB);
     await createEventStoreIndexes();
     await startProjector();
+
+    // Initialize node projector
+    const nodeProjector = initNodeProjector(getDb());
+    await nodeProjector.createIndexes();
+    await nodeProjector.start();
+
     startLeaseReaper(getDb());
   } catch (err) {
     console.warn('[Startup] MongoDB unavailable — running without persistence:', (err as Error).message);
