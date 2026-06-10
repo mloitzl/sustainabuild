@@ -91,6 +91,8 @@ export class NodeProjector {
     const { aggregateId, type, payload, occurredAt } = event;
     const [clusterId, nodeId] = aggregateId.split('#');
 
+    console.log(`[NodeProjector] Processing event: ${type} for aggregate ${aggregateId}`);
+
     let readModel = await this.nodesCollection.findOne({ _id: aggregateId });
 
     if (!readModel) {

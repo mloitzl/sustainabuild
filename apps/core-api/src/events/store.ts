@@ -18,6 +18,7 @@ export async function appendEvent<T extends Record<string, unknown>>(
   payload: T,
 ): Promise<string> {
   const collection = getCollection();
+  console.log(`[Event] Appending ${type} for ${aggregateType}/${aggregateId}`);
   const result = await collection.insertOne({
     type,
     aggregateId,
@@ -25,6 +26,7 @@ export async function appendEvent<T extends Record<string, unknown>>(
     payload,
     occurredAt: new Date(),
   });
+  console.log(`[Event] Successfully appended ${type} (id=${result.insertedId.toHexString()})`);
   return result.insertedId.toHexString();
 }
 

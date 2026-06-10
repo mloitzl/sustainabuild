@@ -285,12 +285,42 @@ export const resolvers = {
       const agentRegistry = context.agentRegistry;
       agentRegistry.addAgent(clusterId, nodeId);
 
-      // Emit domain event
+      // Load or create node aggregate to transition it to ONLINE
+      const aggregateId = `${clusterId}#${nodeId}`;
+      console.log(`[Resolver] Loading events for aggregateId=${aggregateId}`);
+      const events = await getEventsByAggregate(aggregateId);
+      console.log(`[Resolver] Found ${events.length} existing events for node`);
+      let aggregate: NodeAggregate;
+
+      if (events.length === 0) {
+        // New node: provision it first
+        console.log(`[Resolver] Provisioning new node ${nodeId} in cluster ${clusterId}`);
+        aggregate = new NodeAggregate(nodeId, clusterId, 'raspberry-pi', '192.168.1.100');
+        await appendEvent('NodeProvisioned' as any, aggregateId, 'Node', {
+          nodeId,
+          clusterId,
+          hostname: 'raspberry-pi',
+          ipAddress: '192.168.1.100',
+        });
+        console.log(`[Resolver] NodeProvisioned event appended`);
+      } else {
+        console.log(`[Resolver] Loading existing node from history`);
+        aggregate = await NodeAggregate.loadFromHistory(nodeId, clusterId, events);
+      }
+
+      // Transition to ONLINE
+      console.log(`[Resolver] Transitioning node to ONLINE`);
+      await aggregate.onNodeConnected();
+      console.log(`[Resolver] Node transitioned to ONLINE`);
+
+      // Emit NodeConnected event for backward compatibility
+      console.log(`[Resolver] Emitting NodeConnected event for cluster`);
       await appendEvent('NodeConnected', clusterId, 'Cluster', {
         clusterId,
         nodeId,
         connectedAt: new Date(),
       });
+      console.log(`[Resolver] emitNodeConnected completed successfully`);
 
       return {
         clusterId,
@@ -342,23 +372,51 @@ export const resolvers = {
       { clusterId, nodeId }: { clusterId: string; nodeId: string },
       context: any,
     ) => {
-      console.log(`[Resolver] emitNodeHalting(cluster=${clusterId}, node=${nodeId})`);
+      try {
+        console.log(`[Resolver] emitNodeHalting(cluster=${clusterId}, node=${nodeId})`);
 
-      // Remove agent from registry (it's about to shut down)
-      const agentRegistry = context.agentRegistry;
-      agentRegistry.removeAgent(clusterId, nodeId);
+        // Remove agent from registry (it's about to shut down)
+        const agentRegistry = context.agentRegistry;
+        if (!agentRegistry) {
+          console.warn(`[Resolver] WARNING: No agentRegistry in context`);
+        } else {
+          agentRegistry.removeAgent(clusterId, nodeId);
+          console.log(`[Resolver] Agent removed from registry`);
+        }
 
-      // Emit domain event
-      await appendEvent('NodeHalting', clusterId, 'Cluster', {
-        clusterId,
-        nodeId,
-        haltingAt: new Date(),
-      });
+        // Load node aggregate and transition to OFFLINE
+        const aggregateId = `${clusterId}#${nodeId}`;
+        console.log(`[Resolver] Loading events for aggregateId=${aggregateId}`);
+        const events = await getEventsByAggregate(aggregateId);
+        console.log(`[Resolver] Found ${events.length} events for node`);
 
-      return {
-        clusterId,
-        nodeId,
-      };
+        if (events.length > 0) {
+          console.log(`[Resolver] Loading node from history`);
+          const aggregate = await NodeAggregate.loadFromHistory(nodeId, clusterId, events);
+          console.log(`[Resolver] Transitioning node to OFFLINE`);
+          await aggregate.onNodeOffline();
+          console.log(`[Resolver] Node transitioned to OFFLINE`);
+        } else {
+          console.log(`[Resolver] No events found for node, skipping transition`);
+        }
+
+        // Emit NodeHalting event for backward compatibility
+        console.log(`[Resolver] Emitting NodeHalting event for cluster`);
+        await appendEvent('NodeHalting', clusterId, 'Cluster', {
+          clusterId,
+          nodeId,
+          haltingAt: new Date(),
+        });
+        console.log(`[Resolver] emitNodeHalting completed successfully`);
+
+        return {
+          clusterId,
+          nodeId,
+        };
+      } catch (err) {
+        console.error(`[Resolver] Error in emitNodeHalting:`, err);
+        throw err;
+      }
     },
 
     recordNodePowerTick: async (
