@@ -81,6 +81,11 @@ export const typeDefs = /* GraphQL */ `
     version: String!
   }
 
+  type ProvisioningExchange {
+    deviceJwt: String!
+    clusterId: ID!
+  }
+
   type Query {
     health: Health!
     node(id: ID!): Node
@@ -95,6 +100,7 @@ export const typeDefs = /* GraphQL */ `
     renewClusterLease(clusterId: ID!, runId: ID!): Cluster!
     forceShutdownCluster(clusterId: ID!): Cluster!
     generateProvisioningToken(clusterId: ID!): String!
+    exchangeProvisioningToken(provisioningToken: String!): ProvisioningExchange!
   }
 
   type Subscription {

@@ -2,6 +2,7 @@ import { createPubSub } from 'graphql-yoga';
 import { ClusterAggregate } from '../domains/cluster';
 import { getEventsByAggregate, appendEvent } from '../events/store';
 import { getClusterProjector } from '../projections/projector';
+import { generateProvisioningToken, exchangeProvisioningToken } from '../utils/jwt';
 
 export const pubSub = createPubSub<{
   CLUSTER_POWER_UPDATED: [clusterId: string, powerW: number];
@@ -191,9 +192,31 @@ export const resolvers = {
     },
 
     generateProvisioningToken: async (_parent: unknown, { clusterId }: { clusterId: string }) => {
-      // TODO: Sign a real 1-hour JWT in provisioning phase
-      console.log(`[Resolver] generateProvisioningToken(cluster=${clusterId}) — stub`);
-      return `stub-provisioning-token-${clusterId}`;
+      console.log(`[Resolver] generateProvisioningToken(cluster=${clusterId})`);
+      try {
+        const token = await generateProvisioningToken(clusterId);
+        return token;
+      } catch (err) {
+        console.error('[Resolver] generateProvisioningToken error:', err);
+        throw new Error(`Failed to generate provisioning token: ${(err as Error).message}`);
+      }
+    },
+
+    exchangeProvisioningToken: async (
+      _parent: unknown,
+      { provisioningToken }: { provisioningToken: string },
+    ) => {
+      console.log('[Resolver] exchangeProvisioningToken()');
+      try {
+        const result = await exchangeProvisioningToken(provisioningToken);
+        return {
+          deviceJwt: result.deviceJwt,
+          clusterId: result.clusterId,
+        };
+      } catch (err) {
+        console.error('[Resolver] exchangeProvisioningToken error:', err);
+        throw new Error(`Failed to exchange provisioning token: ${(err as Error).message}`);
+      }
     },
   },
 
