@@ -1,6 +1,7 @@
 import { createPubSub } from 'graphql-yoga';
 import { ClusterAggregate } from '../domains/cluster';
 import { getEventsByAggregate, appendEvent } from '../events/store';
+import { getClusterProjector } from '../projections/projector';
 
 export const pubSub = createPubSub<{
   CLUSTER_POWER_UPDATED: [clusterId: string, powerW: number];
@@ -31,14 +32,34 @@ async function executeClusterCommand(
   // Execute command
   await command(aggregate);
 
-  // Return projected state
-  const state = aggregate.getState();
+  // Wait briefly for projector to catch up, then read from read model
+  // (In production, would use event versioning for consistency)
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  // Return from read model
+  const projector = getClusterProjector();
+  const readModel = await projector.getCluster(clusterId);
+
+  if (!readModel) {
+    // Fallback: compute from aggregate state (shouldn't happen)
+    const state = aggregate.getState();
+    return {
+      id: state.id,
+      name: state.name,
+      status: state.status,
+      currentPowerW: 0,
+      activeLeaseCount: state.leases.size,
+      runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+      nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+    };
+  }
+
   return {
-    id: state.id,
-    name: state.name,
-    status: state.status,
-    currentPowerW: 0, // TODO: Read from telemetry
-    activeLeaseCount: state.leases.size,
+    id: readModel._id,
+    name: readModel.name,
+    status: readModel.status,
+    currentPowerW: readModel.currentPowerW,
+    activeLeaseCount: readModel.activeLeaseCount,
     runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
     nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
   };
@@ -54,15 +75,53 @@ export const resolvers = {
       return null;
     },
 
-    clusters: () => ({
-      edges: [],
-      pageInfo: { hasNextPage: false, hasPreviousPage: false, startCursor: null, endCursor: null },
-    }),
+    clusters: async () => {
+      console.log(`[Resolver] clusters()`);
+      const projector = getClusterProjector();
+      const clusters = await projector.getClusters();
 
-    cluster: (_parent: unknown, { id }: { id: string }) => {
-      // TODO: Read from clusters Read Model
-      console.log(`[Resolver] cluster(${id}) — not yet implemented`);
-      return null;
+      const edges = clusters.map((cluster) => ({
+        cursor: Buffer.from(cluster._id).toString('base64'),
+        node: {
+          id: cluster._id,
+          name: cluster.name,
+          status: cluster.status,
+          currentPowerW: cluster.currentPowerW,
+          activeLeaseCount: cluster.activeLeaseCount,
+          runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+          nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+        },
+      }));
+
+      return {
+        edges,
+        pageInfo: {
+          hasNextPage: false,
+          hasPreviousPage: false,
+          startCursor: edges.length > 0 ? edges[0].cursor : null,
+          endCursor: edges.length > 0 ? edges[edges.length - 1].cursor : null,
+        },
+      };
+    },
+
+    cluster: async (_parent: unknown, { id }: { id: string }) => {
+      console.log(`[Resolver] cluster(${id})`);
+      const projector = getClusterProjector();
+      const readModel = await projector.getCluster(id);
+
+      if (!readModel) {
+        return null;
+      }
+
+      return {
+        id: readModel._id,
+        name: readModel.name,
+        status: readModel.status,
+        currentPowerW: readModel.currentPowerW,
+        activeLeaseCount: readModel.activeLeaseCount,
+        runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+        nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
+      };
     },
   },
 
@@ -76,12 +135,18 @@ export const resolvers = {
         createdAt: new Date(),
       });
 
+      // Wait briefly for projector to catch up
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const projector = getClusterProjector();
+      const readModel = await projector.getCluster(clusterId);
+
       return {
-        id: clusterId,
-        name,
-        status: 'OFFLINE',
-        currentPowerW: 0,
-        activeLeaseCount: 0,
+        id: readModel?._id || clusterId,
+        name: readModel?.name || name,
+        status: readModel?.status || 'OFFLINE',
+        currentPowerW: readModel?.currentPowerW || 0,
+        activeLeaseCount: readModel?.activeLeaseCount || 0,
         runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
         nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
       };
