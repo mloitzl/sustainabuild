@@ -20,6 +20,7 @@ type UiMessage = {
 
 type SessionResponse = {
   authenticated: boolean;
+  environment?: string;
   user?: User;
 };
 
@@ -34,6 +35,7 @@ function DashboardSuspenseFallback() {
 export default function DashboardPage() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<User | null>(null);
+  const [environment, setEnvironment] = useState('unknown');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [ticketPreview, setTicketPreview] = useState('');
@@ -51,26 +53,33 @@ export default function DashboardPage() {
     [loadDashboardQuery],
   );
 
-  useEffect(() => {
-    async function loadSession() {
-      try {
-        const res = await fetch('/api/auth/session', { cache: 'no-store' });
-        const data = (await res.json()) as SessionResponse;
-        if (data.authenticated && data.user) {
-          setUser(data.user);
-          setAuthStatus('authenticated');
-          return;
-        }
-        setAuthStatus('unauthenticated');
-      } catch {
-        setAuthStatus('unauthenticated');
-      }
+  const applySessionState = useCallback((data: SessionResponse) => {
+    setEnvironment(data.environment ?? 'unknown');
+    if (data.authenticated && data.user) {
+      setUser(data.user);
+      setAuthStatus('authenticated');
+      return;
     }
 
-    loadSession().catch(() => {
+    setUser(null);
+    setTicketPreview('');
+    setAuthStatus('unauthenticated');
+  }, []);
+
+  const loadSessionState = useCallback(async () => {
+    const res = await fetch('/api/auth/session', { cache: 'no-store' });
+    const data = (await res.json()) as SessionResponse;
+    applySessionState(data);
+    return data;
+  }, [applySessionState]);
+
+  useEffect(() => {
+    loadSessionState().catch(() => {
+      setEnvironment('unknown');
+      setUser(null);
       setAuthStatus('unauthenticated');
     });
-  }, []);
+  }, [loadSessionState]);
 
   useEffect(() => {
     if (authStatus === 'authenticated') {
@@ -95,11 +104,13 @@ export default function DashboardPage() {
       const data = (await res.json()) as { ok?: boolean; username?: string; error?: string };
 
       if (data.ok) {
-        const authenticatedUser = { id: `user-${data.username ?? username}`, username: data.username ?? username };
-        setUser(authenticatedUser);
-        setAuthStatus('authenticated');
-        setTicketPreview('');
-        setMessage({ kind: 'success', text: `Signed in as ${authenticatedUser.username}` });
+        const session = await loadSessionState();
+        if (session.authenticated && session.user) {
+          setMessage({ kind: 'success', text: `Signed in as ${session.user.username}` });
+          return;
+        }
+
+        setMessage({ kind: 'error', text: 'Session could not be established after sign-in.' });
         return;
       }
 
@@ -117,9 +128,7 @@ export default function DashboardPage() {
 
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      setAuthStatus('unauthenticated');
-      setUser(null);
-      setTicketPreview('');
+      await loadSessionState();
       setMessage({ kind: 'info', text: 'Signed out' });
     } catch {
       setMessage({ kind: 'error', text: 'Sign-out request failed. Please try again.' });
@@ -156,26 +165,50 @@ export default function DashboardPage() {
         : 'border-blue-700 bg-blue-950/40 text-blue-200';
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-8 px-6 py-10">
+    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-6 py-10">
       <header className="rounded-xl border border-gray-800 bg-gray-900/70 p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-green-400">SustainaBuild</h1>
             <p className="mt-1 text-sm text-gray-400">GreenOps CI/CD Infrastructure Manager</p>
           </div>
-          <span
-            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
-              authStatus === 'authenticated'
-                ? 'border-green-700 bg-green-950/40 text-green-300'
-                : authStatus === 'loading'
-                  ? 'border-yellow-700 bg-yellow-950/30 text-yellow-200'
-                  : 'border-gray-700 bg-gray-900 text-gray-300'
-            }`}
-          >
-            {authStatus === 'authenticated' ? 'Authenticated' : authStatus === 'loading' ? 'Checking session…' : 'Signed out'}
-          </span>
+          <div className="flex flex-wrap gap-2">
+            <span
+              className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${
+                authStatus === 'authenticated'
+                  ? 'border-green-700 bg-green-950/40 text-green-300'
+                  : authStatus === 'loading'
+                    ? 'border-yellow-700 bg-yellow-950/30 text-yellow-200'
+                    : 'border-gray-700 bg-gray-900 text-gray-300'
+              }`}
+            >
+              {authStatus === 'authenticated' ? 'Authenticated' : authStatus === 'loading' ? 'Checking session…' : 'Signed out'}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-blue-700 bg-blue-950/30 px-3 py-1 text-xs font-semibold text-blue-200">
+              Environment: {environment.toUpperCase()}
+            </span>
+          </div>
         </div>
       </header>
+
+      <section className="rounded-xl border border-gray-800 bg-gray-900/70 p-4">
+        <nav className="flex flex-wrap gap-2 text-xs text-gray-300">
+          <span className="rounded border border-green-700 bg-green-950/40 px-2 py-1 text-green-300">Dashboard</span>
+          <span className="rounded border border-gray-700 bg-gray-900 px-2 py-1">Clusters</span>
+          <span className="rounded border border-gray-700 bg-gray-900 px-2 py-1">Runs</span>
+          <span className="rounded border border-gray-700 bg-gray-900 px-2 py-1">Nodes</span>
+        </nav>
+      </section>
+
+      <section aria-live="polite" aria-atomic="true" className="min-h-14">
+        {message ? (
+          <p role="alert" className={`rounded border px-4 py-3 text-sm ${messageClasses}`}>
+            {message.text}
+          </p>
+        ) : (
+          <div className="rounded border border-gray-800 bg-gray-900/40 px-4 py-3 text-sm text-gray-500">No active alerts.</div>
+        )}
+      </section>
 
       {authStatus === 'loading' ? (
         <section className="rounded-xl border border-gray-800 bg-gray-900/70 p-6">
@@ -255,11 +288,6 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {message ? (
-        <p role="alert" className={`rounded border px-4 py-3 text-sm ${messageClasses}`}>
-          {message.text}
-        </p>
-      ) : null}
       <p className="text-xs text-gray-500">This interface is optimized for flow validation in the current phase.</p>
     </main>
   );
