@@ -1,5 +1,6 @@
 import { createClient, Client } from 'graphql-ws';
 import WebSocket from 'ws';
+import os from 'os';
 
 const CORE_API_URL = process.env.CORE_API_URL ?? 'ws://localhost:4000/graphql';
 const DEVICE_JWT = process.env.DEVICE_JWT ?? '';
@@ -7,6 +8,23 @@ const CLUSTER_ID = process.env.CLUSTER_ID ?? '';
 const NODE_ID = process.env.NODE_ID ?? `node-${Date.now()}`;
 const MOCK_DBUS = process.env.MOCK_DBUS === 'true';
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS) || 300_000; // 5 minutes
+
+function getPrimaryIpv4Address(): string | undefined {
+  const interfaces = os.networkInterfaces();
+  for (const records of Object.values(interfaces)) {
+    if (!records) continue;
+    for (const record of records) {
+      if (record.family === 'IPv4' && !record.internal) {
+        return record.address;
+      }
+    }
+  }
+  return undefined;
+}
+
+const AGENT_HOSTNAME = process.env.AGENT_HOSTNAME ?? os.hostname();
+const AGENT_IP_ADDRESS = process.env.AGENT_IP_ADDRESS ?? getPrimaryIpv4Address() ?? '127.0.0.1';
+const AGENT_FIRMWARE_VERSION = process.env.AGENT_FIRMWARE_VERSION ?? 'dev';
 
 let client: Client;
 let isConnected = false;
@@ -18,6 +36,9 @@ function createWsClient(): Client {
     url: CORE_API_URL,
     connectionParams: {
       Authorization: DEVICE_JWT ? `Bearer ${DEVICE_JWT}` : undefined,
+      hostname: AGENT_HOSTNAME,
+      ipAddress: AGENT_IP_ADDRESS,
+      firmwareVersion: AGENT_FIRMWARE_VERSION,
     },
     retryAttempts: Infinity,
     shouldRetry: () => !isShuttingDown,
@@ -50,12 +71,22 @@ async function emitNodeConnected(): Promise<void> {
     return;
   }
 
+  const hostnameLiteral = JSON.stringify(AGENT_HOSTNAME);
+  const ipAddressLiteral = JSON.stringify(AGENT_IP_ADDRESS);
+  const firmwareVersionLiteral = JSON.stringify(AGENT_FIRMWARE_VERSION);
+
   return new Promise((resolve, reject) => {
     client.subscribe(
       {
         query: `
           mutation {
-            emitNodeConnected(clusterId: "${CLUSTER_ID}", nodeId: "${NODE_ID}") {
+            emitNodeConnected(
+              clusterId: "${CLUSTER_ID}",
+              nodeId: "${NODE_ID}",
+              hostname: ${hostnameLiteral},
+              ipAddress: ${ipAddressLiteral},
+              firmwareVersion: ${firmwareVersionLiteral}
+            ) {
               clusterId
               nodeId
               connectedAt
@@ -233,6 +264,9 @@ export async function startAgent(): Promise<void> {
   console.log(`[Agent] Starting — Core API: ${CORE_API_URL}`);
   console.log(`[Agent] Cluster: ${CLUSTER_ID}, Node: ${NODE_ID}`);
   console.log(`[Agent] Mock D-Bus: ${MOCK_DBUS}`);
+  console.log(
+    `[Agent] Metadata: hostname=${AGENT_HOSTNAME}, ipAddress=${AGENT_IP_ADDRESS}, firmware=${AGENT_FIRMWARE_VERSION}`,
+  );
 
   client = createWsClient();
 
@@ -265,4 +299,3 @@ export async function startAgent(): Promise<void> {
 
   console.log('[Agent] WebSocket client initialized — listening for commands');
 }
-

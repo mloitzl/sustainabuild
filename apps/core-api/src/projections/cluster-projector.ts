@@ -67,6 +67,11 @@ export class ClusterReadModelProjector {
               status: newStatus,
               updatedAt: event.occurredAt,
             },
+            $setOnInsert: {
+              _id: clusterId,
+              name: clusterId,
+              currentPowerW: 0,
+            },
           },
           { upsert: true },
         );
@@ -85,6 +90,12 @@ export class ClusterReadModelProjector {
               activeLeaseCount: leaseCount,
               updatedAt: event.occurredAt,
             },
+            $setOnInsert: {
+              _id: clusterId,
+              name: clusterId,
+              status: 'OFFLINE',
+              currentPowerW: 0,
+            },
           },
           { upsert: true },
         );
@@ -98,6 +109,13 @@ export class ClusterReadModelProjector {
           {
             $set: {
               updatedAt: event.occurredAt,
+            },
+            $setOnInsert: {
+              _id: clusterId,
+              name: clusterId,
+              status: 'OFFLINE',
+              activeLeaseCount: 0,
+              currentPowerW: 0,
             },
           },
           { upsert: true },
@@ -115,6 +133,12 @@ export class ClusterReadModelProjector {
               pendingShutdownEnteredAt: new Date(enteredAt),
               gracePeriodMs,
               updatedAt: event.occurredAt,
+            },
+            $setOnInsert: {
+              _id: clusterId,
+              name: clusterId,
+              activeLeaseCount: 0,
+              currentPowerW: 0,
             },
           },
           { upsert: true },
@@ -135,6 +159,12 @@ export class ClusterReadModelProjector {
               status: 'ONLINE',
               updatedAt: event.occurredAt,
             },
+            $setOnInsert: {
+              _id: clusterId,
+              name: clusterId,
+              activeLeaseCount: 1,
+              currentPowerW: 0,
+            },
           },
           { upsert: true },
         );
@@ -152,6 +182,12 @@ export class ClusterReadModelProjector {
             $unset: {
               pendingShutdownEnteredAt: '',
               gracePeriodMs: '',
+            },
+            $setOnInsert: {
+              _id: clusterId,
+              name: clusterId,
+              activeLeaseCount: 0,
+              currentPowerW: 0,
             },
           },
           { upsert: true },

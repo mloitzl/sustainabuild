@@ -63,6 +63,14 @@ async function main() {
       onConnect: async (ctx: any) => {
         const connectionParams = ctx.connectionParams as Record<string, any>;
         const authHeader = connectionParams?.Authorization || connectionParams?.authorization;
+        const hostname =
+          typeof connectionParams?.hostname === 'string' ? connectionParams.hostname : undefined;
+        const ipAddress =
+          typeof connectionParams?.ipAddress === 'string' ? connectionParams.ipAddress : undefined;
+        const firmwareVersion =
+          typeof connectionParams?.firmwareVersion === 'string'
+            ? connectionParams.firmwareVersion
+            : undefined;
 
         if (authHeader && typeof authHeader === 'string') {
           const token = authHeader.replace(/^Bearer\s+/, '');
@@ -70,7 +78,12 @@ async function main() {
             const decoded = await verifyDeviceJwt(token);
             console.log(`[WebSocket] Authenticated agent: cluster=${decoded.clusterId}`);
             // Attach decoded JWT to context so resolvers can access it
-            ctx.agentInfo = decoded;
+            ctx.agentInfo = {
+              ...decoded,
+              hostname,
+              ipAddress,
+              firmwareVersion,
+            };
             return true; // Allow connection
           } catch (err) {
             console.warn(`[WebSocket] JWT verification failed: ${(err as Error).message}`);
@@ -109,4 +122,3 @@ main().catch((err) => {
   console.error('[Core API] Fatal startup error:', err);
   process.exit(1);
 });
-

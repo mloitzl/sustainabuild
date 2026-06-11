@@ -10,6 +10,7 @@ export interface NodeReadModel {
   clusterId: string;
   hostname: string;
   ipAddress: string;
+  firmwareVersion?: string;
   status: 'PROVISIONED' | 'ONLINE' | 'OFFLINE' | 'DECOMMISSIONED';
   onlineAt?: Date;
   offlineAt?: Date;
@@ -102,6 +103,7 @@ export class NodeProjector {
         clusterId,
         hostname: '',
         ipAddress: '',
+        firmwareVersion: undefined,
         status: 'PROVISIONED',
         joinedAt: occurredAt,
         totalEnergyWh: 0,
@@ -114,9 +116,10 @@ export class NodeProjector {
 
     switch (type) {
       case 'NodeProvisioned': {
-        const { hostname, ipAddress } = payload as any;
+        const { hostname, ipAddress, firmwareVersion } = payload as any;
         readModel.hostname = hostname;
         readModel.ipAddress = ipAddress;
+        readModel.firmwareVersion = firmwareVersion;
         readModel.joinedAt = occurredAt;
         break;
       }

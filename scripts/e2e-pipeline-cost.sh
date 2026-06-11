@@ -7,6 +7,9 @@ CLUSTER_NAME="pipeline-cost-test"
 NODE_ID="node-cost-test-1"
 RUN_ID="run-pipeline-cost-1"
 COST_PER_KWH=0.12
+NODE_HOSTNAME="pipeline-agent.local"
+NODE_IP_ADDRESS="10.42.0.11"
+NODE_FIRMWARE_VERSION="1.2.3-test"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -82,7 +85,15 @@ else
 fi
 
 test_case "Connecting node"
-CONNECT_RESPONSE=$(graphql "mutation { emitNodeConnected(clusterId: \"${CLUSTER_ID}\", nodeId: \"${NODE_ID}\") { clusterId nodeId connectedAt } }")
+CONNECT_RESPONSE=$(
+  graphql "mutation { emitNodeConnected(
+    clusterId: \"${CLUSTER_ID}\",
+    nodeId: \"${NODE_ID}\",
+    hostname: \"${NODE_HOSTNAME}\",
+    ipAddress: \"${NODE_IP_ADDRESS}\",
+    firmwareVersion: \"${NODE_FIRMWARE_VERSION}\"
+  ) { clusterId nodeId connectedAt } }"
+)
 assert_no_errors "$CONNECT_RESPONSE"
 
 CONNECTED_NODE=$(echo "$CONNECT_RESPONSE" | jq -r '.data.emitNodeConnected.nodeId')
@@ -94,6 +105,23 @@ else
 fi
 
 sleep 2
+
+test_case "Verifying node metadata projection"
+NODES_RESPONSE=$(
+  graphql "query { nodesByCluster(clusterId: \"${CLUSTER_ID}\") { edges { node { id hostname ipAddress firmwareVersion } } } }"
+)
+assert_no_errors "$NODES_RESPONSE"
+
+PROJECTED_HOSTNAME=$(echo "$NODES_RESPONSE" | jq -r '.data.nodesByCluster.edges[0].node.hostname')
+PROJECTED_IP=$(echo "$NODES_RESPONSE" | jq -r '.data.nodesByCluster.edges[0].node.ipAddress')
+PROJECTED_FIRMWARE=$(echo "$NODES_RESPONSE" | jq -r '.data.nodesByCluster.edges[0].node.firmwareVersion')
+
+if [ "$PROJECTED_HOSTNAME" = "$NODE_HOSTNAME" ] && [ "$PROJECTED_IP" = "$NODE_IP_ADDRESS" ] && [ "$PROJECTED_FIRMWARE" = "$NODE_FIRMWARE_VERSION" ]; then
+  pass "Node metadata projected correctly"
+else
+  fail "Node metadata mismatch: hostname=$PROJECTED_HOSTNAME ip=$PROJECTED_IP firmware=$PROJECTED_FIRMWARE"
+  exit 1
+fi
 
 test_case "Recording power ticks"
 for i in {1..10}; do

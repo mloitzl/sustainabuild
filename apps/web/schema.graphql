@@ -1,5 +1,4 @@
-export const typeDefs = /* GraphQL */ `
-  interface Node {
+interface Node {
     id: ID!
   }
 
@@ -191,4 +190,3 @@ export const typeDefs = /* GraphQL */ `
     nodeJoinedCluster(clusterId: ID!): ClusterNode!
     shutdownNode(clusterId: ID!, nodeId: ID!): ShutdownNodeCommand!
   }
-`;

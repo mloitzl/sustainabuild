@@ -91,10 +91,10 @@ async function executeClusterCommand(
 
   return {
     id: readModel._id,
-    name: readModel.name,
-    status: readModel.status,
-    currentPowerW: readModel.currentPowerW,
-    activeLeaseCount: readModel.activeLeaseCount,
+    name: readModel.name ?? readModel._id,
+    status: readModel.status ?? 'OFFLINE',
+    currentPowerW: readModel.currentPowerW ?? 0,
+    activeLeaseCount: readModel.activeLeaseCount ?? 0,
     runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
     nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
   };
@@ -119,10 +119,10 @@ export const resolvers = {
         cursor: Buffer.from(cluster._id).toString('base64'),
         node: {
           id: cluster._id,
-          name: cluster.name,
-          status: cluster.status,
-          currentPowerW: cluster.currentPowerW,
-          activeLeaseCount: cluster.activeLeaseCount,
+          name: cluster.name ?? cluster._id,
+          status: cluster.status ?? 'OFFLINE',
+          currentPowerW: cluster.currentPowerW ?? 0,
+          activeLeaseCount: cluster.activeLeaseCount ?? 0,
           runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
           nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
         },
@@ -150,10 +150,10 @@ export const resolvers = {
 
       return {
         id: readModel._id,
-        name: readModel.name,
-        status: readModel.status,
-        currentPowerW: readModel.currentPowerW,
-        activeLeaseCount: readModel.activeLeaseCount,
+        name: readModel.name ?? readModel._id,
+        status: readModel.status ?? 'OFFLINE',
+        currentPowerW: readModel.currentPowerW ?? 0,
+        activeLeaseCount: readModel.activeLeaseCount ?? 0,
         runs: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
         nodes: { edges: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } },
       };
@@ -184,6 +184,7 @@ export const resolvers = {
           clusterId: node.clusterId,
           hostname: node.hostname,
           ipAddress: node.ipAddress,
+          firmwareVersion: node.firmwareVersion,
           status: node.status,
           onlineAt: node.onlineAt?.toISOString(),
           offlineAt: node.offlineAt?.toISOString(),
@@ -355,10 +356,36 @@ export const resolvers = {
 
     emitNodeConnected: async (
       _parent: unknown,
-      { clusterId, nodeId }: { clusterId: string; nodeId: string },
+      {
+        clusterId,
+        nodeId,
+        hostname,
+        ipAddress,
+        firmwareVersion,
+      }: {
+        clusterId: string;
+        nodeId: string;
+        hostname?: string;
+        ipAddress?: string;
+        firmwareVersion?: string;
+      },
       context: any,
     ) => {
       console.log(`[Resolver] emitNodeConnected(cluster=${clusterId}, node=${nodeId})`);
+
+      const contextAgentInfo = (context.agentInfo ?? {}) as Record<string, unknown>;
+      const resolvedHostname =
+        (typeof hostname === 'string' && hostname.trim()) ||
+        (typeof contextAgentInfo.hostname === 'string' && contextAgentInfo.hostname.trim()) ||
+        nodeId;
+      const resolvedIpAddress =
+        (typeof ipAddress === 'string' && ipAddress.trim()) ||
+        (typeof contextAgentInfo.ipAddress === 'string' && contextAgentInfo.ipAddress.trim()) ||
+        '0.0.0.0';
+      const resolvedFirmwareVersion =
+        (typeof firmwareVersion === 'string' && firmwareVersion.trim()) ||
+        (typeof contextAgentInfo.firmwareVersion === 'string' && contextAgentInfo.firmwareVersion.trim()) ||
+        undefined;
 
       // Register agent in the connected agents registry
       const agentRegistry = context.agentRegistry;
@@ -374,12 +401,19 @@ export const resolvers = {
       if (events.length === 0) {
         // New node: provision it first
         console.log(`[Resolver] Provisioning new node ${nodeId} in cluster ${clusterId}`);
-        aggregate = new NodeAggregate(nodeId, clusterId, 'raspberry-pi', '192.168.1.100');
+        aggregate = new NodeAggregate(
+          nodeId,
+          clusterId,
+          resolvedHostname,
+          resolvedIpAddress,
+          resolvedFirmwareVersion,
+        );
         await appendEvent('NodeProvisioned' as any, aggregateId, 'Node', {
           nodeId,
           clusterId,
-          hostname: 'raspberry-pi',
-          ipAddress: '192.168.1.100',
+          hostname: resolvedHostname,
+          ipAddress: resolvedIpAddress,
+          firmwareVersion: resolvedFirmwareVersion,
         });
         console.log(`[Resolver] NodeProvisioned event appended`);
       } else {
@@ -511,7 +545,7 @@ export const resolvers = {
       let aggregate: NodeAggregate;
 
       if (events.length === 0) {
-        aggregate = new NodeAggregate(nodeId, clusterId, 'raspberry-pi', '192.168.1.100');
+        aggregate = new NodeAggregate(nodeId, clusterId, nodeId, '0.0.0.0');
       } else {
         aggregate = await NodeAggregate.loadFromHistory(nodeId, clusterId, events);
       }

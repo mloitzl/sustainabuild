@@ -22,6 +22,10 @@ pnpm exec turbo run format
 # Run tests (when added to apps)
 pnpm exec turbo run test
 
+# Run web Playwright smoke tests
+pnpm --filter=@sustainabuild/web run test:e2e
+pnpm --filter=@sustainabuild/web run test:e2e:headed
+
 # Run a single app/package
 pnpm --filter=@power-pipelines/core-api run build
 pnpm --filter=@power-pipelines/web run dev
@@ -103,4 +107,6 @@ pnpm --filter=@power-pipelines/web run dev
 - WebSocket handlers must validate auth tickets/JWTs and clean up subscriptions on disconnect
 - Add GraphQL `@auth` directives or check resolvers for permission guards
 - Test lease acquisition/release logic thoroughly (boundary cases at 0→1 and 1→0)
+- For UI changes, run the Playwright smoke suite in `apps/web/tests/e2e` before considering the task done
+- Keep Playwright tests deterministic (prefer route mocks for unstable externals and keep auth/session flows real)
 - Never add MQTT or REST endpoints without ADR discussion

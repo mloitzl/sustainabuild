@@ -2,19 +2,41 @@
   "name": "@sustainabuild/web",
   "version": "0.0.1",
   "private": true,
+  "relay": {
+    "src": "./src",
+    "schema": "./schema.graphql",
+    "language": "typescript",
+    "exclude": [
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/__tests__/**"
+    ]
+  },
   "scripts": {
+    "relay:schema": "node scripts/generate-relay-schema.mjs",
+    "relay:compile": "relay-compiler",
+    "relay": "pnpm run relay:schema && pnpm run relay:compile",
+    "relay:watch": "pnpm run relay:schema && relay-compiler --watch",
     "build": "next build",
     "dev": "next dev --port 3000",
+    "dev:e2e": "next dev --port 3101",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@sustainabuild/types": "workspace:*",
+    "graphql": "^16.11.0",
     "iron-session": "^8.0.3",
     "jose": "^5.9.6",
     "next": "^15.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-relay": "^18.2.0",
+    "relay-runtime": "^18.2.0"
   },
   "devDependencies": {
     "@sustainabuild/eslint-config": "workspace:*",
@@ -22,10 +44,15 @@
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/react-relay": "^18.2.1",
+    "@types/relay-runtime": "^20.1.1",
+    "@playwright/test": "^1.54.2",
     "autoprefixer": "^10.4.20",
+    "babel-plugin-relay": "^18.2.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.0.0",
     "postcss": "^8.4.49",
+    "relay-compiler": "^18.2.0",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.0"
   }

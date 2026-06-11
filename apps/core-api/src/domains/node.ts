@@ -7,6 +7,7 @@ export interface NodeAggregateState {
   clusterId: string;
   hostname: string;
   ipAddress: string;
+  firmwareVersion?: string;
   status: 'PROVISIONED' | 'ONLINE' | 'OFFLINE' | 'DECOMMISSIONED';
   onlineAt?: Date;
   offlineAt?: Date;
@@ -28,13 +29,20 @@ export interface NodeAggregateState {
 export class NodeAggregate {
   private state: NodeAggregateState;
 
-  constructor(nodeId: string, clusterId: string, hostname: string, ipAddress: string) {
+  constructor(
+    nodeId: string,
+    clusterId: string,
+    hostname: string,
+    ipAddress: string,
+    firmwareVersion?: string,
+  ) {
     this.state = {
       id: `${clusterId}#${nodeId}`,
       nodeId,
       clusterId,
       hostname,
       ipAddress,
+      firmwareVersion,
       status: 'PROVISIONED',
       joinedAt: new Date(),
       totalEnergyWh: 0,
@@ -54,9 +62,10 @@ export class NodeAggregate {
 
     for (const event of events) {
       if (event.type === 'NodeProvisioned') {
-        const { hostname, ipAddress } = event.payload as any;
+        const { hostname, ipAddress, firmwareVersion } = event.payload as any;
         aggregate.state.hostname = hostname;
         aggregate.state.ipAddress = ipAddress;
+        aggregate.state.firmwareVersion = firmwareVersion;
         aggregate.state.joinedAt = event.occurredAt;
       } else if (event.type === 'NodeOnline') {
         aggregate.state.status = 'ONLINE';

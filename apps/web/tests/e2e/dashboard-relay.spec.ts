@@ -1,0 +1,13 @@
+import { expect, test } from '@playwright/test';
+import { login, mockDashboardQuerySuccess } from './helpers';
+
+test('dashboard route query renders relay-backed cluster data', async ({ page }) => {
+  await mockDashboardQuerySuccess(page, 'cluster-from-relay');
+  await login(page);
+
+  await expect(page.getByText('Authenticated')).toBeVisible();
+  await expect(page.getByText('Core API health: OK')).toBeVisible();
+  await expect(page.getByText('cluster-from-relay')).toBeVisible();
+  await expect(page.getByText('Leases: 1')).toBeVisible();
+  await expect(page.getByText('Power: 42 W')).toBeVisible();
+});
