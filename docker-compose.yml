@@ -113,7 +113,7 @@ services:
       authentik-redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/-/health/ready/ >/dev/null"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/-/health/ready/', timeout=5)"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -142,6 +142,27 @@ services:
       authentik-server:
         condition: service_started
 
+  authentik-init:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-latest}
+    restart: "no"
+    command: ["apply_blueprint", "/blueprints/sustainabuild-blueprint.yaml"]
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRESQL_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRESQL_PASSWORD:-authentik}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-replace-with-a-strong-random-authentik-secret}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-sustainabuild-web}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:3000/api/auth/callback?provider=oidc}
+      OIDC_REDIRECT_URI_ALT: ${OIDC_REDIRECT_URI_ALT:-http://127.0.0.1:3000/api/auth/callback?provider=oidc}
+    volumes:
+      - ./infra/authentik/sustainabuild-blueprint.yaml:/blueprints/sustainabuild-blueprint.yaml:ro
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+
   web:
     build:
       context: .
@@ -157,7 +178,7 @@ services:
       AUTH_PROVIDERS: ${AUTH_PROVIDERS:-local,oidc}
       OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-Authentik}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://authentik-server:9000/application/o/sustainabuild/}
-      OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-http://authentik-server:9000/application/o/.well-known/openid-configuration}
+      OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-http://authentik-server:9000/application/o/sustainabuild/.well-known/openid-configuration}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-sustainabuild-web}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me}
       OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
@@ -167,6 +188,8 @@ services:
         condition: service_healthy
       authentik-server:
         condition: service_started
+      authentik-init:
+        condition: service_completed_successfully
 
 volumes:
   mongodb_data:
