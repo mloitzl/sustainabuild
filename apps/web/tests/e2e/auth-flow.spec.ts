@@ -9,7 +9,7 @@ test('auth flow: signed out -> signed in -> signed out', async ({ page }) => {
   await expect(authBadge).toContainText('Signed out');
   const flashAlert = page.locator('p[role="alert"]');
 
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(flashAlert).toContainText('Missing credentials');
 
   await login(page, 'operator', 's3cret');

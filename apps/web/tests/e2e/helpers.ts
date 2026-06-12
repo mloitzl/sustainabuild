@@ -37,5 +37,5 @@ export async function login(page: Page, username = 'playwright', password = 'sec
   await expect(page.getByRole('heading', { name: 'SustainaBuild' })).toBeVisible();
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }

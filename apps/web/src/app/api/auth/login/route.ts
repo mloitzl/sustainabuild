@@ -11,6 +11,17 @@ function asErrorResponse(error: unknown, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+function toUserSafeAuthError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : 'Authentication failed';
+  if (raw.includes('OIDC discovery returned non-JSON response')) {
+    return 'OIDC discovery failed. Check OIDC_ISSUER_URL and your Authentik provider slug.';
+  }
+  if (raw.length > 180) {
+    return `${raw.slice(0, 177)}...`;
+  }
+  return raw;
+}
+
 export async function GET(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
 
@@ -38,7 +49,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(loginStart.authorizationUrl);
   } catch (error) {
-    return asErrorResponse(error);
+    const redirectTarget = new URL('/', req.nextUrl.origin);
+    redirectTarget.searchParams.set('auth_error', toUserSafeAuthError(error));
+    return NextResponse.redirect(redirectTarget);
   }
 }
 
