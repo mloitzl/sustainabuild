@@ -4,6 +4,15 @@ export interface SessionData {
   user?: {
     id: string;
     username: string;
+    providerId?: string;
+  };
+  authProviderId?: string;
+  authFlow?: {
+    providerId: string;
+    state: string;
+    nonce: string;
+    codeVerifier: string;
+    createdAt: number;
   };
 }
 

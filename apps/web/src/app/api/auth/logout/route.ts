@@ -5,6 +5,8 @@ import { sessionOptions, SessionData } from '@/lib/session';
 
 export async function POST() {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  session.authFlow = undefined;
+  session.authProviderId = undefined;
   session.destroy();
   return NextResponse.json({ ok: true });
 }

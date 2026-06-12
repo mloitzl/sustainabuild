@@ -10,6 +10,7 @@
 ## 2. Security & BFF Pattern
 * **No JWTs in LocalStorage:** The frontend SPA does not handle JWTs.
 * **The Cookie:** The BFF issues an encrypted session cookie upon login.
+* **Pluggable Login Providers:** The BFF auth layer supports environment-selected providers (`github`, generic `oidc`/Authentik) behind one normalized session model.
 * **Token Exchange:** The BFF intercepts GraphQL requests from the browser, reads the cookie, and generates a 5-minute short-lived JWT. It passes this JWT to the stateless Core API via the `Authorization` header.
 * **WebSocket Auth Tickets:** For GraphQL Subscriptions, the BFF issues a 10-second "Auth Ticket". Relay uses this ticket to establish a direct WSS connection to the Core API.
 

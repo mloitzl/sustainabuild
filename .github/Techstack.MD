@@ -23,6 +23,7 @@
 * **Environment:** Next.js API Routes.
 * **Session Management:** `iron-session` (Stateless, encrypted `HttpOnly`, `Secure`, `SameSite=Strict` cookies).
 * **JWT Generation:** `jose` (Zero-dependency JWT signing/verification).
+* **Pluggable Auth Providers:** Provider contract/registry with environment selection (`AUTH_PROVIDER` / `AUTH_PROVIDERS`) for `github` and generic `oidc` (e.g., Authentik).
 
 ## 4. Core API (`apps/core-api`)
 * **Runtime:** Node.js.

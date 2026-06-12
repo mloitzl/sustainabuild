@@ -11,6 +11,15 @@ type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 type User = {
   id: string;
   username: string;
+  providerId?: string;
+};
+
+type AuthProvider = {
+  id: string;
+  name: string;
+  kind: 'local' | 'oauth';
+  passwordLogin: boolean;
+  loginPath: string | null;
 };
 
 type UiMessage = {
@@ -22,6 +31,11 @@ type SessionResponse = {
   authenticated: boolean;
   environment?: string;
   user?: User;
+  auth?: {
+    defaultProviderId: string | null;
+    providers: AuthProvider[];
+    providerConfigError?: string;
+  };
 };
 
 function DashboardSuspenseFallback() {
@@ -36,6 +50,9 @@ export default function DashboardPage() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<User | null>(null);
   const [environment, setEnvironment] = useState('unknown');
+  const [providers, setProviders] = useState<AuthProvider[]>([]);
+  const [defaultProviderId, setDefaultProviderId] = useState<string | null>(null);
+  const [providerConfigError, setProviderConfigError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [ticketPreview, setTicketPreview] = useState('');
@@ -55,6 +72,9 @@ export default function DashboardPage() {
 
   const applySessionState = useCallback((data: SessionResponse) => {
     setEnvironment(data.environment ?? 'unknown');
+    setProviders(data.auth?.providers ?? []);
+    setDefaultProviderId(data.auth?.defaultProviderId ?? null);
+    setProviderConfigError(data.auth?.providerConfigError ?? null);
     if (data.authenticated && data.user) {
       setUser(data.user);
       setAuthStatus('authenticated');
@@ -76,10 +96,39 @@ export default function DashboardPage() {
   useEffect(() => {
     loadSessionState().catch(() => {
       setEnvironment('unknown');
+      setProviders([]);
+      setDefaultProviderId(null);
+      setProviderConfigError('Failed to load session state');
       setUser(null);
       setAuthStatus('unauthenticated');
     });
   }, [loadSessionState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const authError = url.searchParams.get('auth_error');
+    const authStatusParam = url.searchParams.get('auth');
+    const authProvider = url.searchParams.get('provider');
+
+    if (authError) {
+      setMessage({ kind: 'error', text: authError });
+    } else if (authStatusParam === 'success') {
+      const providerLabel =
+        providers.find((provider) => provider.id === authProvider)?.name ?? authProvider ?? 'provider';
+      setMessage({ kind: 'success', text: `Signed in via ${providerLabel}` });
+    }
+
+    if (authError || authStatusParam) {
+      url.searchParams.delete('auth_error');
+      url.searchParams.delete('auth');
+      url.searchParams.delete('provider');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    }
+  }, [providers]);
 
   useEffect(() => {
     if (authStatus === 'authenticated') {
@@ -99,7 +148,7 @@ export default function DashboardPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ provider: 'local', username, password }),
       });
       const data = (await res.json()) as { ok?: boolean; username?: string; error?: string };
 
@@ -120,6 +169,11 @@ export default function DashboardPage() {
     } finally {
       setLoginPending(false);
     }
+  }
+
+  function handleProviderRedirectLogin(providerId: string) {
+    setMessage({ kind: 'info', text: `Redirecting to ${providerId} login…` });
+    window.location.assign(`/api/auth/login?provider=${providerId}`);
   }
 
   async function handleLogout() {
@@ -163,6 +217,8 @@ export default function DashboardPage() {
       : message?.kind === 'error'
         ? 'border-red-700 bg-red-950/40 text-red-200'
         : 'border-blue-700 bg-blue-950/40 text-blue-200';
+  const passwordProvider = providers.find((provider) => provider.passwordLogin);
+  const redirectProviders = providers.filter((provider) => provider.loginPath !== null);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-6 py-10">
@@ -217,36 +273,70 @@ export default function DashboardPage() {
       ) : authStatus === 'unauthenticated' ? (
         <section className="rounded-xl border border-gray-800 bg-gray-900/70 p-6">
           <h2 className="text-lg font-semibold text-gray-100">Sign in to continue</h2>
-          <p className="mt-1 text-sm text-gray-400">Use your credentials to access cluster management actions.</p>
-          <form onSubmit={handleLogin} className="mt-6 flex max-w-md flex-col gap-4">
-            <label className="flex flex-col gap-1 text-sm text-gray-300">
-              Username
-              <input
-                className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white outline-none ring-green-500 focus:ring-2"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-gray-300">
-              Password
-              <input
-                className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white outline-none ring-green-500 focus:ring-2"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={loginPending}
-              className="rounded bg-green-600 px-4 py-2 font-semibold text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {loginPending ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+          <p className="mt-1 text-sm text-gray-400">
+            {providers.length > 1
+              ? 'Choose an identity provider, or use local credentials for development access.'
+              : 'Use the configured identity provider to access cluster management actions.'}
+          </p>
+          {defaultProviderId ? <p className="mt-2 text-xs text-gray-500">Default provider: {defaultProviderId}</p> : null}
+
+          {providerConfigError ? (
+            <p className="mt-4 rounded border border-red-700 bg-red-950/40 px-4 py-3 text-sm text-red-200">{providerConfigError}</p>
+          ) : null}
+
+          {redirectProviders.length > 0 ? (
+            <div className="mt-5 flex max-w-md flex-col gap-3">
+              {redirectProviders.map((provider) => (
+                <button
+                  key={provider.id}
+                  type="button"
+                  onClick={() => handleProviderRedirectLogin(provider.id)}
+                  className="rounded border border-blue-700 bg-blue-950/40 px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-blue-900/50"
+                >
+                  Sign in with {provider.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {passwordProvider ? (
+            <form onSubmit={handleLogin} className="mt-6 flex max-w-md flex-col gap-4 border-t border-gray-800 pt-6">
+              <h3 className="text-sm font-semibold text-gray-200">Local credentials</h3>
+              <label className="flex flex-col gap-1 text-sm text-gray-300">
+                Username
+                <input
+                  className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white outline-none ring-green-500 focus:ring-2"
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm text-gray-300">
+                Password
+                <input
+                  className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-white outline-none ring-green-500 focus:ring-2"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={loginPending}
+                className="rounded bg-green-600 px-4 py-2 font-semibold text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {loginPending ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
+          ) : null}
+
+          {providers.length === 0 && !providerConfigError ? (
+            <p className="mt-4 rounded border border-red-700 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+              No authentication providers are enabled. Set AUTH_PROVIDER or AUTH_PROVIDERS in the environment.
+            </p>
+          ) : null}
         </section>
       ) : (
         <section className="grid gap-4 md:grid-cols-2">
