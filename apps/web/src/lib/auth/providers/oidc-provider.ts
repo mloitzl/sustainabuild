@@ -20,7 +20,8 @@ const discoveryCache = new Map<string, Promise<OidcDiscoveryDocument>>();
 function getCachedDiscovery(issuerBaseUrl: string): Promise<OidcDiscoveryDocument> {
   if (!discoveryCache.has(issuerBaseUrl)) {
     const promise = (async () => {
-      const discoveryUrl = new URL('/.well-known/openid-configuration', issuerBaseUrl).toString();
+      const issuerWithSlash = issuerBaseUrl.endsWith('/') ? issuerBaseUrl : `${issuerBaseUrl}/`;
+      const discoveryUrl = new URL('.well-known/openid-configuration', issuerWithSlash).toString();
       const res = await fetch(discoveryUrl);
       const doc = await parseJsonResponse<OidcDiscoveryDocument>(res, 'OIDC discovery');
       if (!res.ok) {
@@ -50,7 +51,7 @@ export function createOidcAuthProvider(): AuthProvider {
     throw new Error('OIDC provider is enabled but OIDC_ISSUER_URL/OIDC_CLIENT_ID are not set');
   }
 
-  const normalizedIssuer = issuerBaseUrl.replace(/\/+$/, '');
+  const normalizedIssuer = issuerBaseUrl.trim();
   const scopes = process.env.OIDC_SCOPES ?? 'openid profile email';
   const usernameClaim = process.env.OIDC_USERNAME_CLAIM ?? 'preferred_username';
   const providerName = process.env.OIDC_PROVIDER_NAME ?? 'OIDC';
@@ -159,4 +160,3 @@ export function createOidcAuthProvider(): AuthProvider {
     },
   };
 }
-

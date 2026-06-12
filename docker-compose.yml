@@ -59,6 +59,89 @@ services:
       retries: 3
       start_period: 15s
 
+  authentik-postgresql:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AUTHENTIK_POSTGRESQL_DB:-authentik}
+      POSTGRES_USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRESQL_PASSWORD:-authentik}
+    volumes:
+      - authentik_postgresql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTHENTIK_POSTGRESQL_USER:-authentik} -d ${AUTHENTIK_POSTGRESQL_DB:-authentik}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  authentik-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-latest}
+    restart: unless-stopped
+    command: server
+    ports:
+      - "9000:9000"
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRESQL_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRESQL_PASSWORD:-authentik}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-replace-with-a-strong-random-authentik-secret}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@example.com}
+      AUTHENTIK_BOOTSTRAP_USERNAME: ${AUTHENTIK_BOOTSTRAP_USERNAME:-akadmin}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-changeme}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-changeme-token}
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/-/health/ready/ >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-latest}
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRESQL_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRESQL_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRESQL_PASSWORD:-authentik}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-replace-with-a-strong-random-authentik-secret}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+      authentik-server:
+        condition: service_started
+
   web:
     build:
       context: .
@@ -71,10 +154,22 @@ services:
       CORE_API_URL: http://core-api:4000/graphql
       SESSION_SECRET: ${SESSION_SECRET:-dev-secret-must-be-32-chars-long!!}
       CORE_API_JWT_SECRET: ${CORE_API_JWT_SECRET:-change-me-in-production-32chars!!}
+      AUTH_PROVIDERS: ${AUTH_PROVIDERS:-local,oidc}
+      OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-Authentik}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://authentik-server:9000/application/o/sustainabuild/}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-sustainabuild-web}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+      OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
     depends_on:
       core-api:
         condition: service_healthy
+      authentik-server:
+        condition: service_started
 
 volumes:
   mongodb_data:
   mongodb_keyfile:
+  authentik_postgresql_data:
+  authentik_media:
+  authentik_templates:
