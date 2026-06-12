@@ -157,6 +157,7 @@ services:
       AUTH_PROVIDERS: ${AUTH_PROVIDERS:-local,oidc}
       OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-Authentik}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://authentik-server:9000/application/o/sustainabuild/}
+      OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-http://authentik-server:9000/application/o/.well-known/openid-configuration}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-sustainabuild-web}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me}
       OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}

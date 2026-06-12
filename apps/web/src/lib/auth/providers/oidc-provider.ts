@@ -17,25 +17,55 @@ type OidcTokenResponse = {
 
 const discoveryCache = new Map<string, Promise<OidcDiscoveryDocument>>();
 
-function getCachedDiscovery(issuerBaseUrl: string): Promise<OidcDiscoveryDocument> {
-  if (!discoveryCache.has(issuerBaseUrl)) {
-    const promise = (async () => {
-      const issuerWithSlash = issuerBaseUrl.endsWith('/') ? issuerBaseUrl : `${issuerBaseUrl}/`;
-      const discoveryUrl = new URL('.well-known/openid-configuration', issuerWithSlash).toString();
-      const res = await fetch(discoveryUrl);
-      const doc = await parseJsonResponse<OidcDiscoveryDocument>(res, 'OIDC discovery');
-      if (!res.ok) {
-        throw new Error(`OIDC discovery failed (${res.status})`);
-      }
-      if (!doc.authorization_endpoint || !doc.token_endpoint) {
-        throw new Error('OIDC discovery document is missing authorization_endpoint or token_endpoint');
-      }
-      return doc;
-    })();
-    discoveryCache.set(issuerBaseUrl, promise);
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function buildDiscoveryUrls(issuerBaseUrl: string, discoveryUrlOverride?: string): string[] {
+  const candidates: string[] = [];
+  if (discoveryUrlOverride) {
+    candidates.push(discoveryUrlOverride);
   }
 
-  return discoveryCache.get(issuerBaseUrl)!;
+  const issuerUrl = new URL(issuerBaseUrl);
+  const issuerWithSlash = issuerUrl.toString().endsWith('/') ? issuerUrl.toString() : `${issuerUrl.toString()}/`;
+  candidates.push(new URL('.well-known/openid-configuration', issuerWithSlash).toString());
+  candidates.push(new URL('/.well-known/openid-configuration', issuerUrl.origin).toString());
+
+  if (issuerUrl.pathname.includes('/application/o/') && issuerUrl.pathname !== '/application/o/') {
+    candidates.push(new URL('/application/o/.well-known/openid-configuration', issuerUrl.origin).toString());
+  }
+
+  return unique(candidates);
+}
+
+function getCachedDiscovery(discoveryUrls: string[]): Promise<OidcDiscoveryDocument> {
+  const cacheKey = discoveryUrls.join('|');
+  if (!discoveryCache.has(cacheKey)) {
+    const promise = (async () => {
+      let lastError: Error | null = null;
+      for (const discoveryUrl of discoveryUrls) {
+        try {
+          const res = await fetch(discoveryUrl);
+          const doc = await parseJsonResponse<OidcDiscoveryDocument>(res, 'OIDC discovery');
+          if (!res.ok) {
+            throw new Error(`OIDC discovery failed (${res.status}) at ${discoveryUrl}`);
+          }
+          if (!doc.authorization_endpoint || !doc.token_endpoint) {
+            throw new Error(`OIDC discovery document is missing authorization_endpoint or token_endpoint at ${discoveryUrl}`);
+          }
+          return doc;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error('Unknown OIDC discovery error');
+        }
+      }
+
+      throw lastError ?? new Error('OIDC discovery failed for all configured endpoints');
+    })();
+    discoveryCache.set(cacheKey, promise);
+  }
+
+  return discoveryCache.get(cacheKey)!;
 }
 
 function readStringClaim(claims: Record<string, unknown>, claimName: string): string | undefined {
@@ -52,6 +82,8 @@ export function createOidcAuthProvider(): AuthProvider {
   }
 
   const normalizedIssuer = issuerBaseUrl.trim();
+  const discoveryUrlOverride = process.env.OIDC_DISCOVERY_URL?.trim();
+  const discoveryUrls = buildDiscoveryUrls(normalizedIssuer, discoveryUrlOverride);
   const scopes = process.env.OIDC_SCOPES ?? 'openid profile email';
   const usernameClaim = process.env.OIDC_USERNAME_CLAIM ?? 'preferred_username';
   const providerName = process.env.OIDC_PROVIDER_NAME ?? 'OIDC';
@@ -62,7 +94,7 @@ export function createOidcAuthProvider(): AuthProvider {
     kind: 'oauth',
     passwordLogin: false,
     beginLogin: async ({ origin, callbackPath }) => {
-      const discovery = await getCachedDiscovery(normalizedIssuer);
+      const discovery = await getCachedDiscovery(discoveryUrls);
       const callbackUrl = new URL(callbackPath, origin);
       callbackUrl.searchParams.set('provider', 'oidc');
 
@@ -88,7 +120,7 @@ export function createOidcAuthProvider(): AuthProvider {
       };
     },
     completeLogin: async ({ code, redirectUri, codeVerifier, nonce }) => {
-      const discovery = await getCachedDiscovery(normalizedIssuer);
+      const discovery = await getCachedDiscovery(discoveryUrls);
 
       const tokenBody = new URLSearchParams({
         grant_type: 'authorization_code',
