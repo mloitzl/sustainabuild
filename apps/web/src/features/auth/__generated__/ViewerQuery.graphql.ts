@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<a14287d714ce44fe7ad31d211a1de863>>
+ * @generated SignedSource<<87070320620011f9a2af03b3bf2feb76>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -27,55 +27,50 @@ export type ViewerQuery = {
 const node: ConcreteRequest = (function(){
 var v0 = [
   {
-    "kind": "ClientExtension",
+    "alias": null,
+    "args": null,
+    "concreteType": "User",
+    "kind": "LinkedField",
+    "name": "viewer",
+    "plural": false,
     "selections": [
       {
         "alias": null,
         "args": null,
-        "concreteType": "User",
-        "kind": "LinkedField",
-        "name": "viewer",
-        "plural": false,
-        "selections": [
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "id",
-            "storageKey": null
-          },
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "username",
-            "storageKey": null
-          },
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "providerId",
-            "storageKey": null
-          },
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "avatarUrl",
-            "storageKey": null
-          },
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "email",
-            "storageKey": null
-          }
-        ],
+        "kind": "ScalarField",
+        "name": "id",
+        "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "username",
+        "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "providerId",
+        "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "avatarUrl",
+        "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "email",
         "storageKey": null
       }
-    ]
+    ],
+    "storageKey": null
   }
 ];
 return {
@@ -96,12 +91,12 @@ return {
     "selections": (v0/*: any*/)
   },
   "params": {
-    "cacheID": "1ae14a943eea017b8f106cb917f679b1",
+    "cacheID": "b3498a1a347a497649b79498f7a13dba",
     "id": null,
     "metadata": {},
     "name": "ViewerQuery",
     "operationKind": "query",
-    "text": null
+    "text": "query ViewerQuery {\n  viewer {\n    id\n    username\n    providerId\n    avatarUrl\n    email\n  }\n}\n"
   }
 };
 })();

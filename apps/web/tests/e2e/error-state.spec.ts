@@ -1,10 +1,25 @@
 import { expect, test } from '@playwright/test';
-import { login } from './helpers';
 
 test('route error boundary appears on query failure and can retry', async ({ page }) => {
   let shouldFail = true;
 
   await page.route('**/api/graphql', async (route) => {
+    const body = route.request().postDataJSON() as { query?: string } | null;
+    const query = body?.query ?? '';
+
+    // The viewer identity query must always succeed (authenticated) so the
+    // dashboard mounts; only the dashboard query fails once, then recovers.
+    if (/\bviewer\b/.test(query) && !/\bclusters\b/.test(query)) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: { viewer: { id: 'viewer-pw', username: 'playwright', providerId: 'local', avatarUrl: null, email: null } },
+        }),
+      });
+      return;
+    }
+
     if (shouldFail) {
       shouldFail = false;
       await route.fulfill({
@@ -27,7 +42,8 @@ test('route error boundary appears on query failure and can retry', async ({ pag
     });
   });
 
-  await login(page);
+  // The viewer query is mocked authenticated, so the dashboard mounts on load.
+  await page.goto('/');
 
   await expect(page.getByText('Dashboard data failed to load')).toBeVisible();
   await page.getByRole('button', { name: 'Retry loading dashboard' }).click();

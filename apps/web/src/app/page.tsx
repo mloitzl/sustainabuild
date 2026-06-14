@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const [loginPending, setLoginPending] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [ticketPending, setTicketPending] = useState(false);
+  const [viewerFetchKey, setViewerFetchKey] = useState(0);
   const [viewerQueryRef, loadViewerQuery] = useQueryLoader<ViewerQueryType>(viewerQuery);
   const [dashboardQueryRef, loadDashboardQuery, disposeDashboardQuery] =
     useQueryLoader<DashboardRouteEntryQuery>(dashboardRouteQuery);
@@ -90,13 +91,12 @@ export default function DashboardPage() {
   }, []);
 
   // Identity comes from the BFF `viewer` query: a null viewer means logged out.
-  const reloadViewer = useCallback(
-    (fetchPolicy: 'store-or-network' | 'network-only' = 'store-or-network') => {
-      setAuthStatus('loading');
-      loadViewerQuery({}, { fetchPolicy });
-    },
-    [loadViewerQuery],
-  );
+  // Bumping viewerFetchKey re-runs the load effect below, so login/logout
+  // re-resolve identity.
+  const reloadViewer = useCallback(() => {
+    setAuthStatus('loading');
+    setViewerFetchKey((key) => key + 1);
+  }, []);
 
   const handleViewerResolved = useCallback((resolved: ViewerData) => {
     setAuthStatus(resolved ? 'authenticated' : 'unauthenticated');
@@ -107,8 +107,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadProviders();
-    reloadViewer('store-or-network');
-  }, [loadProviders, reloadViewer]);
+  }, [loadProviders]);
+
+  // Load the viewer query on mount and whenever reloadViewer bumps the key.
+  // force:true bypasses the BFF response cache so a stale identity is never
+  // reused across a login/logout transition.
+  useEffect(() => {
+    loadViewerQuery({}, { fetchPolicy: 'network-only', networkCacheConfig: { force: true } });
+  }, [loadViewerQuery, viewerFetchKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -159,7 +165,7 @@ export default function DashboardPage() {
       const data = (await res.json()) as { ok?: boolean; username?: string; error?: string };
 
       if (data.ok) {
-        reloadViewer('network-only');
+        reloadViewer();
         setMessage({ kind: 'success', text: `Signed in as ${data.username ?? username}` });
         return;
       }
@@ -183,7 +189,7 @@ export default function DashboardPage() {
 
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      reloadViewer('network-only');
+      reloadViewer();
       setMessage({ kind: 'info', text: 'Signed out' });
     } catch {
       setMessage({ kind: 'error', text: 'Sign-out request failed. Please try again.' });
@@ -381,7 +387,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      <RouteErrorBoundary onRetry={() => reloadViewer('network-only')}>
+      <RouteErrorBoundary onRetry={() => reloadViewer()}>
         <Suspense fallback={<SessionLoadingBody />}>
           {viewerQueryRef ? (
             <ViewerGate

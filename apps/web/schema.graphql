@@ -154,6 +154,7 @@ interface Node {
   }
 
   type Query {
+  viewer: User
     health: Health!
     node(id: ID!): Node
     clusters(first: Int, after: String): ClusterConnection!
@@ -197,8 +198,4 @@ type User implements Node {
   providerId: String
   avatarUrl: String
   email: String
-}
-
-extend type Query {
-  viewer: User
 }

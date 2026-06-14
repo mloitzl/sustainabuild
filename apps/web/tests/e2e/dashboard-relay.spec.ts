@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { login, mockDashboardQuerySuccess } from './helpers';
+import { mockDashboardQuerySuccess } from './helpers';
 
 test('dashboard route query renders relay-backed cluster data', async ({ page }) => {
+  // The viewer mock authenticates, so the dashboard renders without a login step.
   await mockDashboardQuerySuccess(page, 'cluster-from-relay');
-  await login(page);
+  await page.goto('/');
 
   await expect(page.getByText('Authenticated')).toBeVisible();
   await expect(page.getByText('Core API health: OK')).toBeVisible();

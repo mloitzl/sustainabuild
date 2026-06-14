@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { mockGraphQL } from './helpers';
 
 // Runs against the second web server (port 3102) where OIDC discovery succeeds but
 // resolves to an INTERNAL authorization_endpoint (authentik-server:9000). The
@@ -13,6 +14,11 @@ test('oidc authorization redirect targets the browser-reachable host, not intern
   // The /api/auth/login route returns the authorization URL as a redirect Location
   // header. Capturing that header is the exact authorizationUrl built by beginLogin,
   // with none of the cross-origin asset noise that following the redirect would add.
+  // Resolve the viewer query as logged-out so the signed-out card (and its
+  // "Sign in with Authentik" button) renders deterministically without waiting on
+  // the gateway — this test is about the redirect, not identity.
+  await mockGraphQL(page, { viewer: null });
+
   let authorizeUrl: string | undefined;
   page.on('response', (response) => {
     if (authorizeUrl) return;

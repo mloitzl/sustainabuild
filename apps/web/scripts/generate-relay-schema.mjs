@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { viewerSdl } from '../src/lib/graphql/viewer-sdl.mjs';
+import { userTypeSdl, viewerQueryField } from '../src/lib/graphql/viewer-sdl.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,9 +19,17 @@ if (!match || !match[1]) {
 
 const coreSdl = match[1].trim();
 
-// 1. Relay schema: Core SDL + the additive local viewer SDL, so relay-compiler
-//    validates `viewer` queries against the same stitched shape the gateway serves.
-const stitchedSdl = `${coreSdl}\n\n${viewerSdl.trim()}\n`;
+// 1. Relay schema: Core SDL with `viewer` spliced into the Query block + the
+//    appended User type, so relay-compiler validates `viewer` queries against the
+//    same shape the gateway serves. The field MUST live inside `type Query`
+//    (not `extend type Query`): relay-compiler treats extend-introduced fields as
+//    client-only extensions and strips them from the server query text.
+const queryBlock = /type Query \{\n/;
+if (!queryBlock.test(coreSdl)) {
+  throw new Error('Unable to locate "type Query {" block in Core SDL to splice viewer field');
+}
+const withViewer = coreSdl.replace(queryBlock, (m) => `${m}${viewerQueryField}\n`);
+const stitchedSdl = `${withViewer}\n\n${userTypeSdl.trim()}\n`;
 fs.writeFileSync(relaySchemaTarget, stitchedSdl, 'utf8');
 console.log(`[relay:schema] Wrote ${relaySchemaTarget}`);
 

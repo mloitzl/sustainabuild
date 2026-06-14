@@ -1,8 +1,23 @@
 import { expect, test } from '@playwright/test';
-import { login, mockDashboardQuerySuccess } from './helpers';
+import { login, mockGraphQL, type MockViewer } from './helpers';
 
 test('auth flow: signed out -> signed in -> signed out', async ({ page }) => {
-  await mockDashboardQuerySuccess(page);
+  // The /api/graphql mock decides identity, so flip it in step with the real
+  // login/logout requests (which still run, setting/clearing the session cookie).
+  let viewer: MockViewer = null;
+  await mockGraphQL(page, { getViewer: () => viewer });
+
+  await page.route('**/api/auth/login', async (route) => {
+    const body = route.request().postDataJSON() as { username?: string; password?: string } | null;
+    if (route.request().method() === 'POST' && body?.username && body?.password) {
+      viewer = { id: 'user-operator', username: 'operator', providerId: 'local' };
+    }
+    await route.continue();
+  });
+  await page.route('**/api/auth/logout', async (route) => {
+    viewer = null;
+    await route.continue();
+  });
 
   await page.goto('/');
   const authBadge = page.locator('header span').first();
