@@ -83,6 +83,7 @@ export function createOidcAuthProvider(): AuthProvider {
 
   const normalizedIssuer = issuerBaseUrl.trim();
   const discoveryUrlOverride = process.env.OIDC_DISCOVERY_URL?.trim();
+  const authorizationEndpointOverride = process.env.OIDC_AUTHORIZATION_ENDPOINT?.trim();
   const discoveryUrls = buildDiscoveryUrls(normalizedIssuer, discoveryUrlOverride);
   const scopes = process.env.OIDC_SCOPES ?? 'openid profile email';
   const usernameClaim = process.env.OIDC_USERNAME_CLAIM ?? 'preferred_username';
@@ -102,7 +103,7 @@ export function createOidcAuthProvider(): AuthProvider {
       const state = randomUrlSafeString(32);
       const nonce = randomUrlSafeString(32);
 
-      const authUrl = new URL(discovery.authorization_endpoint!);
+      const authUrl = new URL(authorizationEndpointOverride || discovery.authorization_endpoint!);
       authUrl.searchParams.set('client_id', clientId);
       authUrl.searchParams.set('redirect_uri', callbackUrl.toString());
       authUrl.searchParams.set('response_type', 'code');

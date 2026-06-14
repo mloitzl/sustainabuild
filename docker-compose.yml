@@ -179,6 +179,11 @@ services:
       OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-Authentik}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://authentik-server:9000/application/o/sustainabuild/}
       OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-http://authentik-server:9000/application/o/sustainabuild/.well-known/openid-configuration}
+      # Discovery/token/userinfo run server-side over internal DNS (authentik-server),
+      # but the authorization redirect is followed by the user's browser, which can only
+      # reach Authentik via the published localhost:9000 port. Override the discovered
+      # (internal) authorization_endpoint with a browser-reachable host.
+      OIDC_AUTHORIZATION_ENDPOINT: ${OIDC_AUTHORIZATION_ENDPOINT:-http://localhost:9000/application/o/authorize/}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-sustainabuild-web}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-change-me}
       OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}

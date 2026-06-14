@@ -20,6 +20,7 @@
     "build": "next build",
     "dev": "next dev --port 3000",
     "dev:e2e": "next dev --port 3101",
+    "dev:e2e:oidc": "next dev --port 3102",
     "start": "next start",
     "lint": "next lint",
     "test:e2e": "playwright test",
