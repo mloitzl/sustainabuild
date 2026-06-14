@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<b89c818ad6f77e37762fd7e6b76872e8>>
+ * @generated SignedSource<<9c94a9bea3b6b39e7466754c01597288>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -11,18 +11,11 @@
 import { ReaderFragment } from 'relay-runtime';
 import { FragmentRefs } from "relay-runtime";
 export type DashboardShell_query$data = {
-  readonly clusters: {
-    readonly edges: ReadonlyArray<{
-      readonly node: {
-        readonly id: string;
-        readonly " $fragmentSpreads": FragmentRefs<"ClusterListItem_cluster">;
-      };
-    }>;
-  };
   readonly health: {
     readonly ok: boolean;
     readonly version: string;
   };
+  readonly " $fragmentSpreads": FragmentRefs<"ClusterOverview_query">;
   readonly " $fragmentType": "DashboardShell_query";
 };
 export type DashboardShell_query$key = {
@@ -68,7 +61,6 @@ const node: ReaderFragment = {
       "storageKey": null
     },
     {
-      "alias": null,
       "args": [
         {
           "kind": "Variable",
@@ -76,53 +68,14 @@ const node: ReaderFragment = {
           "variableName": "first"
         }
       ],
-      "concreteType": "ClusterConnection",
-      "kind": "LinkedField",
-      "name": "clusters",
-      "plural": false,
-      "selections": [
-        {
-          "alias": null,
-          "args": null,
-          "concreteType": "ClusterEdge",
-          "kind": "LinkedField",
-          "name": "edges",
-          "plural": true,
-          "selections": [
-            {
-              "alias": null,
-              "args": null,
-              "concreteType": "Cluster",
-              "kind": "LinkedField",
-              "name": "node",
-              "plural": false,
-              "selections": [
-                {
-                  "alias": null,
-                  "args": null,
-                  "kind": "ScalarField",
-                  "name": "id",
-                  "storageKey": null
-                },
-                {
-                  "args": null,
-                  "kind": "FragmentSpread",
-                  "name": "ClusterListItem_cluster"
-                }
-              ],
-              "storageKey": null
-            }
-          ],
-          "storageKey": null
-        }
-      ],
-      "storageKey": null
+      "kind": "FragmentSpread",
+      "name": "ClusterOverview_query"
     }
   ],
   "type": "Query",
   "abstractKey": null
 };
 
-(node as any).hash = "b8dc83050bf0c9b9fcb9d83002d0b186";
+(node as any).hash = "5a132b7e294b254450612d8c677118ff";
 
 export default node;

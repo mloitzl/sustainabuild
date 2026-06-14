@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<dcf93c6e11b26bdf324e2463b254775a>>
+ * @generated SignedSource<<9d90785c748f903052759d7241e7d5a9>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -118,13 +118,6 @@ return {
                     "alias": null,
                     "args": null,
                     "kind": "ScalarField",
-                    "name": "name",
-                    "storageKey": null
-                  },
-                  {
-                    "alias": null,
-                    "args": null,
-                    "kind": "ScalarField",
                     "name": "status",
                     "storageKey": null
                   },
@@ -132,14 +125,21 @@ return {
                     "alias": null,
                     "args": null,
                     "kind": "ScalarField",
-                    "name": "activeLeaseCount",
+                    "name": "currentPowerW",
                     "storageKey": null
                   },
                   {
                     "alias": null,
                     "args": null,
                     "kind": "ScalarField",
-                    "name": "currentPowerW",
+                    "name": "name",
+                    "storageKey": null
+                  },
+                  {
+                    "alias": null,
+                    "args": null,
+                    "kind": "ScalarField",
+                    "name": "activeLeaseCount",
                     "storageKey": null
                   }
                 ],
@@ -154,12 +154,12 @@ return {
     ]
   },
   "params": {
-    "cacheID": "5b4cbf7e79ce8a39bb2fcc082f9a9efd",
+    "cacheID": "4fb45a36a7f953733c5e6c403dbc01ab",
     "id": null,
     "metadata": {},
     "name": "DashboardRouteEntryQuery",
     "operationKind": "query",
-    "text": "query DashboardRouteEntryQuery(\n  $first: Int\n) {\n  ...DashboardShell_query_3ASum4\n}\n\nfragment ClusterListItem_cluster on Cluster {\n  id\n  name\n  status\n  activeLeaseCount\n  currentPowerW\n}\n\nfragment DashboardShell_query_3ASum4 on Query {\n  health {\n    ok\n    version\n  }\n  clusters(first: $first) {\n    edges {\n      node {\n        id\n        ...ClusterListItem_cluster\n      }\n    }\n  }\n}\n"
+    "text": "query DashboardRouteEntryQuery(\n  $first: Int\n) {\n  ...DashboardShell_query_3ASum4\n}\n\nfragment ClusterCard_cluster on Cluster {\n  id\n  name\n  status\n  activeLeaseCount\n  currentPowerW\n}\n\nfragment ClusterOverview_query_3ASum4 on Query {\n  clusters(first: $first) {\n    edges {\n      node {\n        id\n        status\n        currentPowerW\n        ...ClusterCard_cluster\n      }\n    }\n  }\n}\n\nfragment DashboardShell_query_3ASum4 on Query {\n  health {\n    ok\n    version\n  }\n  ...ClusterOverview_query_3ASum4\n}\n"
   }
 };
 })();

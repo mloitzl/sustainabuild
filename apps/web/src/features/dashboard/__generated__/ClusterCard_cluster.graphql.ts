@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<b8f1b3fce9ed1f2dde116f2ca95e29fc>>
+ * @generated SignedSource<<982b4d12059d93c5834b52257a021fb0>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -11,24 +11,24 @@
 import { ReaderFragment } from 'relay-runtime';
 export type ClusterStatus = "BOOTING" | "OFFLINE" | "ONLINE" | "PENDING_SHUTDOWN" | "SHUTTING_DOWN" | "%future added value";
 import { FragmentRefs } from "relay-runtime";
-export type ClusterListItem_cluster$data = {
+export type ClusterCard_cluster$data = {
   readonly activeLeaseCount: number;
   readonly currentPowerW: number;
   readonly id: string;
   readonly name: string;
   readonly status: ClusterStatus;
-  readonly " $fragmentType": "ClusterListItem_cluster";
+  readonly " $fragmentType": "ClusterCard_cluster";
 };
-export type ClusterListItem_cluster$key = {
-  readonly " $data"?: ClusterListItem_cluster$data;
-  readonly " $fragmentSpreads": FragmentRefs<"ClusterListItem_cluster">;
+export type ClusterCard_cluster$key = {
+  readonly " $data"?: ClusterCard_cluster$data;
+  readonly " $fragmentSpreads": FragmentRefs<"ClusterCard_cluster">;
 };
 
 const node: ReaderFragment = {
   "argumentDefinitions": [],
   "kind": "Fragment",
   "metadata": null,
-  "name": "ClusterListItem_cluster",
+  "name": "ClusterCard_cluster",
   "selections": [
     {
       "alias": null,
@@ -70,6 +70,6 @@ const node: ReaderFragment = {
   "abstractKey": null
 };
 
-(node as any).hash = "ed37685b426b8ed8f63128a59e8a203d";
+(node as any).hash = "092cde7f7d2e79a7dc8fb6bed8596a85";
 
 export default node;
