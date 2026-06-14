@@ -5,6 +5,8 @@ export interface SessionData {
     id: string;
     username: string;
     providerId?: string;
+    avatarUrl?: string;
+    email?: string;
   };
   authProviderId?: string;
   authFlow?: {

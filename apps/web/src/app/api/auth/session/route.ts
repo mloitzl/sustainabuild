@@ -50,6 +50,8 @@ export async function GET() {
       id: session.user.id,
       username: session.user.username,
       providerId: session.user.providerId ?? session.authProviderId ?? providerPayload.defaultProviderId ?? 'local',
+      avatarUrl: session.user.avatarUrl ?? null,
+      email: session.user.email ?? null,
     },
   });
 }

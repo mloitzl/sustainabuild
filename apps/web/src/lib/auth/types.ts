@@ -4,6 +4,8 @@ export type AuthUser = {
   id: string;
   username: string;
   providerId: string;
+  avatarUrl?: string;
+  email?: string;
 };
 
 export type PublicAuthProvider = {

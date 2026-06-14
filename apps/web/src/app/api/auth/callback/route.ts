@@ -69,6 +69,8 @@ export async function GET(req: NextRequest) {
       id: user.id,
       username: user.username,
       providerId: user.providerId,
+      avatarUrl: user.avatarUrl,
+      email: user.email,
     };
     session.authProviderId = user.providerId;
     session.authFlow = undefined;

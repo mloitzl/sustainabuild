@@ -185,10 +185,15 @@ export function createOidcAuthProvider(): AuthProvider {
         readStringClaim(tokenClaims, usernameClaim) ??
         sub;
 
+      const avatarUrl = readStringClaim(userClaims, 'picture') ?? readStringClaim(tokenClaims, 'picture');
+      const email = readStringClaim(userClaims, 'email') ?? readStringClaim(tokenClaims, 'email');
+
       return {
         id: `oidc-${sub}`,
         username: preferredUsername,
         providerId: 'oidc',
+        avatarUrl,
+        email,
       };
     },
   };

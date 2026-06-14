@@ -75,6 +75,8 @@ export async function POST(req: Request) {
       id: user.id,
       username: user.username,
       providerId: user.providerId,
+      avatarUrl: user.avatarUrl,
+      email: user.email,
     };
     session.authProviderId = user.providerId;
     session.authFlow = undefined;

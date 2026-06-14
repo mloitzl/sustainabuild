@@ -12,6 +12,8 @@ type GitHubTokenResponse = {
 type GitHubUserResponse = {
   id?: number;
   login?: string;
+  avatar_url?: string;
+  email?: string | null;
 };
 
 export function createGitHubAuthProvider(): AuthProvider {
@@ -98,6 +100,8 @@ export function createGitHubAuthProvider(): AuthProvider {
         id: `github-${userPayload.id}`,
         username: userPayload.login,
         providerId: 'github',
+        avatarUrl: userPayload.avatar_url,
+        email: userPayload.email ?? undefined,
       };
     },
   };
